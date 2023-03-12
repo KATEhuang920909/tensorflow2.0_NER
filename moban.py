@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import tensorflow_addons as tfa
-
+from keras.utils.vis_utils import plot_model
 from tqdm.notebook import tqdm
 
 threthold = 100
@@ -231,6 +231,8 @@ from sklearn.model_selection import train_test_split
 # define model and dataset
 data_loader = DataLoader(train_histories, train_labels, unique_feature)
 emb_model = DCNV2Model(feature_num_vocabs, feat_dim=8, out_dim=32, num_cross=5, num_linear=0)
+plot_model(emb_model, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
+
 predictors = [Predictor(3), Predictor(10), Predictor(5)]
 trainer = Trainer(emb_model, predictors)
 
@@ -239,64 +241,20 @@ loss_metric = tf.keras.metrics.Mean()
 f1_metric = tf.keras.metrics.Mean()
 acc_metric = tf.keras.metrics.Mean()
 
-train_sessions = np.arange(num_session)
-dev_sessions, val_sessions = train_test_split(train_sessions, test_size=2000, shuffle=True)
-dev_dataset = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor(dev_sessions)) \
-    .shuffle(num_session, reshuffle_each_iteration=True) \
-    .batch(128) \
-    .map(data_loader.call) \
-    .prefetch(tf.data.AUTOTUNE)
-
-
-# train for 10 epochs
-
-@tf.function(experimental_relax_shapes=True)
-def forward_step(batch_inputs):
-    with tf.GradientTape() as tape:
-        loss, f1, acc = trainer(batch_inputs, training=True)
-    gradients = tape.gradient(loss, trainer.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, trainer.trainable_variables))
-    return loss, f1, acc
-
-
-with tf.device("CPU: 0"):
-    for epoch in range(10):
-        with tqdm(total=len(dev_dataset)) as pbar:
-            for batch_inputs in dev_dataset:
-                loss, f1, acc = forward_step(batch_inputs)
-                loss_metric(loss)
-                f1_metric(f1)
-                acc_metric(acc)
-                progress = {"BCE": loss_metric.result().numpy(), "f1": f1_metric.result().numpy(),
-                            "accuracy": acc_metric.result().numpy()}
-                pbar.set_postfix(progress)
-                pbar.update(1)
-        print("epoch:", epoch + 1)
-        print("dev:", loss_metric.result().numpy(), f1_metric.result().numpy())
-        val_loss, val_f1, val_acc = trainer(data_loader.call(val_sessions))
-        print("val:", val_loss.numpy(), val_f1.numpy(), val_acc.numpy())
-        loss_metric.reset_states()
-        f1_metric.reset_states()
-
-# use all_data for train
-# define model and dataset
-data_loader = DataLoader(train_histories, train_labels, unique_feature)
-emb_model = DCNV2Model(feature_num_vocabs, feat_dim=8, out_dim=32, num_cross=5, num_linear=0)
-predictors = [Predictor(3), Predictor(10), Predictor(5)]
-trainer = Trainer(emb_model, predictors)
-
-optimizer = tfa.optimizers.LazyAdam(learning_rate=1e-3)
-loss_metric = tf.keras.metrics.Mean()
-f1_metric = tf.keras.metrics.Mean()
-acc_metric = tf.keras.metrics.Mean()
-
-train_sessions = np.arange(num_session)
+data_sessions = np.arange(num_session)
+train_sessions, val_sessions = train_test_split(data_sessions, test_size=2000, shuffle=True)
 train_dataset = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor(train_sessions)) \
     .shuffle(num_session, reshuffle_each_iteration=True) \
     .batch(128) \
     .map(data_loader.call) \
     .prefetch(tf.data.AUTOTUNE)
 
+val_dataset = tf.data.Dataset.from_tensor_slices(tf.convert_to_tensor(val_sessions)) \
+    .shuffle(num_session, reshuffle_each_iteration=True) \
+    .batch(128) \
+    .map(data_loader.call) \
+    .prefetch(tf.data.AUTOTUNE)
+
 
 # train for 10 epochs
 
@@ -310,6 +268,7 @@ def forward_step(batch_inputs):
 
 
 with tf.device("CPU: 0"):
+    best_f1_score = 0.0
     for epoch in range(10):
         with tqdm(total=len(train_dataset)) as pbar:
             for batch_inputs in train_dataset:
@@ -323,8 +282,23 @@ with tf.device("CPU: 0"):
                 pbar.update(1)
         print("epoch:", epoch + 1)
         print("train:", loss_metric.result().numpy(), f1_metric.result().numpy())
-        loss_metric.reset_states()
-        f1_metric.reset_states()
+
+        with tqdm(total=len(val_dataset)) as pbar:
+            final_loss, final_f1, final_acc = 0.0, 0.0, 0.0
+            for i, batch_inputs in enumerate(val_dataset):
+                val_loss, val_f1, val_acc = forward_step(batch_inputs)
+                final_loss += val_loss
+                final_f1 += val_f1
+                final_acc += val_acc
+            if final_f1 >= best_f1_score:
+                best_f1_score = final_f1
+                emb_model.save("/best_model")
+        print("val:", final_loss / (i + 1), final_f1 / (i + 1), final_acc / (i + 1), "best_f1_score:", best_f1_score)
+
+        # val_loss, val_f1, val_acc = trainer(data_loader.call(val_sessions))
+        # print("val:", val_loss.numpy(), val_f1.numpy(), val_acc.numpy())
+        # loss_metric.reset_states()
+        # f1_metric.reset_states()
 
 embeddings = emb_model(unique_feature).numpy()
 
@@ -365,7 +339,7 @@ for (sample_submission, test) in iter_test:
     pred_emb = embeddings[test_feats["unique_ix"].values].sum(axis=0).reshape([1, -1])
     pred_emb /= np.maximum(eps, np.linalg.norm(pred_emb, ord=2))
     sample_submission["correct"] = \
-    tf.cast(tf.math.sigmoid(predictors[level_group](pred_emb)) > threthold, "int32").numpy()[0]
+        tf.cast(tf.math.sigmoid(predictors[level_group](pred_emb)) > threthold, "int32").numpy()[0]
 
     env.predict(sample_submission)
 
