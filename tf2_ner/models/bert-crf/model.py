@@ -5,145 +5,31 @@
 import gc
 
 import numpy as np
-import pandas as pd
 import tensorflow as tf
-import tensorflow_addons as tfa
 from keras.utils.vis_utils import plot_model
 from tqdm.notebook import tqdm
-
-threthold = 100
-
-feature_columns = ["event_name", "name", "level", "fqid", "room_fqid", "text_fqid", "text"]
-feature_ix_columns = [col + "_ix" for col in feature_columns]
-usecols = ["session_id", "level_group"] + feature_columns
-
-train_df = pd.read_csv("train.csv", usecols=usecols)
-
-# category to int
-feature_dicts = {}
-for col in tqdm(feature_columns):
-    vc = train_df[col].fillna("nan_value").astype(str).value_counts()
-    vc = vc[vc.values >= threthold]
-    feature_dict = {k: i for i, k in enumerate(vc.index, start=1)}
-    train_df[col + "_ix"] = np.vectorize(lambda x: feature_dict.get(x, 0))(
-        train_df[col].fillna("nan_value").astype(str)).astype(np.int32)
-    feature_dicts[col] = feature_dict
-    del train_df[col]
-    gc.collect()
-feature_num_vocabs = [len(feature_dicts[k]) + 1 for k in feature_columns]
-
-for col, num_vocab in zip(feature_columns, feature_num_vocabs):
-    print(col, num_vocab)
-
-train_df["level_group"] = train_df["level_group"].map({k: v for v, k in enumerate(['0-4', '5-12', '13-22'])})
-
-# aggregate unique_feature
-unique_train_df = train_df[feature_ix_columns].drop_duplicates()
-unique_train_df["unique_ix"] = np.arange(unique_train_df.shape[0])
-
-train_df = train_df.merge(unique_train_df,
-                          on=feature_ix_columns,
-                          how="left")
-unique_feature = tf.convert_to_tensor(unique_train_df[feature_ix_columns].values)
-
-for col in feature_ix_columns:
-    del train_df[col]
-    gc.collect()
-
-# session to index
-train_session_map = {k: i for i, k in enumerate(train_df["session_id"].unique())}
-train_df["session_ix"] = train_df["session_id"].map(train_session_map)
-num_session = train_df["session_ix"].max() + 1
-
-# history to ragged tensor
-train_histories = []
-for i in range(3):
-    tmp_df = train_df[["session_ix", "unique_ix", "level_group"]].query(f"level_group == {i}")
-    train_histories.append(
-        tf.RaggedTensor.from_value_rowids(values=tf.convert_to_tensor(tmp_df["unique_ix"].astype(np.int64)),
-                                          value_rowids=tf.convert_to_tensor(tmp_df["session_ix"].astype(np.int64)),
-                                          nrows=num_session))
-del train_df
-gc.collect()
-
-# label to tensor
-train_label_df = pd.read_csv("train_labels.csv")
-train_label_df["session_ix"] = train_label_df["session_id"].map(lambda x: train_session_map[int(x.split("_")[0])])
-train_label_df["question_ix"] = train_label_df["session_id"].map(lambda x: int(x.split("_")[1][1:]))
-
-train_label = train_label_df.pivot_table(columns="question_ix",
-                                         index="session_ix",
-                                         values="correct",
-                                         aggfunc="first").loc[np.arange(num_session)].values.astype(np.float32)
-train_labels = [tf.convert_to_tensor(train_label[:, :3]), tf.convert_to_tensor(train_label[:, 3:13]),
-                tf.convert_to_tensor(train_label[:, 13:])]
-
-del train_label_df
-gc.collect()
-
-
-# define dataset
-class DataLoader():
-
-    def __init__(self, train_histories, train_labels, train_unique_feataures):
-        self.train_histories = train_histories
-        self.train_labels = train_labels
-        self.train_unique_feataures = train_unique_feataures
-
-    def call(self, inputs):
-        session_ix = inputs
-        raw_histories = [tf.gather(self.train_histories[i], session_ix) for i in range(3)]
-        historiy_lengths = [tf.shape(h.values)[0] for h in raw_histories]
-        unique_ix, unique_idx = tf.unique(tf.concat([h.values for h in raw_histories], axis=0))
-        history_values = tf.split(unique_idx, historiy_lengths, axis=0)
-        histories = [tf.RaggedTensor.from_value_rowids(values=history_values[i],
-                                                       value_rowids=raw_histories[i].value_rowids(),
-                                                       nrows=raw_histories[i].nrows()) for i in range(3)]
-        inputs = {}
-        for i in range(3):
-            inputs[f"history_{i}"] = histories[i]
-            label = tf.gather(self.train_labels[i], session_ix)
-            inputs[f"label_{i}"] = label
-        inputs["unique_feature"] = tf.gather(self.train_unique_feataures, unique_ix)
-        return inputs
+from ...bert4keras.models import build_transformer_model
+from ...bert4keras.layers import Dense, ConditionalRandomField
+from ...bert4keras.snippets import ViterbiDecoder
+from config import *
+from ...utils.metrics import METRICS
 
 
 # define model
-class DCNV2Model(tf.keras.Model):
+class BERTCRF2Model(tf.keras.Model):
 
-    def __init__(self, feature_num_vocabs, feat_dim, out_dim, num_cross, num_linear):
-        super(DCNV2Model, self).__init__()
-        self.num_features = len(feature_num_vocabs)
-
-        self.feature_num_vocabs = feature_num_vocabs
-        self.feat_dim = feat_dim
-        self.out_dim = out_dim
-        self.num_cross = num_cross
-        self.num_linear = num_linear
-
-        self.input_dim = feat_dim * self.num_features
-        self.embedding_layers = [tf.keras.layers.Embedding(feature_num_vocabs[i], feat_dim) for i in
-                                 range(self.num_features)]
-        self.cross_in_layers = [tf.keras.layers.Dense(self.feat_dim) for _ in range(self.num_cross)]
-        self.cross_out_layers = [tf.keras.layers.Dense(self.input_dim) for _ in range(self.num_cross)]
-        self.linear_layers = [tf.keras.layers.Dense(self.input_dim, activation="gelu") for _ in range(self.num_linear)]
-        self.out_layer = tf.keras.layers.Dense(self.out_dim)
+    def __init__(self, feat_dim, out_dim, num_linear):
+        super(BERTCRF2Model, self).__init__()
+        self.bert_model = build_transformer_model(config_path, checkpoint_path)
+        self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
 
     def call(self, inputs):
-        X = []
-        for i in range(self.num_features):
-            X.append(self.embedding_layers[i](tf.gather(inputs, i, axis=1)))
-        X = tf.concat(X, axis=1)
-        X0 = tf.identity(X)
+        output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
+        outputs = self.bert_model.get_layer(output_layer).output
+        outputs = Dense(len(categories) * 2 + 1)(outputs)
 
-        for i in range(self.num_cross):
-            X = X0 * self.cross_out_layers[i](self.cross_in_layers[i](X)) + X
-
-        for i in range(self.num_linear):
-            X = self.linear_layers[i](X)
-
-        X = self.out_layer(X)
-        return X
+        output = self.CRF(outputs) #logits
+        return output
 
 
 class Predictor(tf.keras.Model):
@@ -156,16 +42,34 @@ class Predictor(tf.keras.Model):
         return self.out_layer(inputs)
 
 
-class Trainer(tf.keras.Model):
+class Trainer(tf.keras.Model,ViterbiDecoder):
 
-    def __init__(self, emb_model, predictors):
+    def __init__(self, model, num_class):
         super(Trainer, self).__init__()
-        self.emb_model = emb_model
-        self.predictors = predictors
+        self.model = model
         self.eps = 1e-9
+        self.metric=METRICS(num_class=num_class)
 
     def call(self, inputs):
-        unique_emb = self.emb_model(inputs["unique_feature"])
+        """
+        # 计算loss、acc、f1值
+        """
+        nodes = self.model.predict(inputs[0])[0]
+        labels = self.decode(nodes)
+        entities, starting = [], False
+        for i, label in enumerate(labels):
+            if label > 0:
+                if label % 2 == 1:
+                    starting = True
+                    entities.append([[i], categories[(label - 1) // 2]])
+                elif starting:
+                    entities[-1][0].append(i)
+                else:
+                    starting = False
+            else:
+                starting = False
+        return [(mapping[w[0]][0], mapping[w[-1]][-1], l) for w, l in entities]
+
         loss_sum = 0.
         pos_true_positive = 0.
         pos_false_positive = 0.
@@ -213,7 +117,7 @@ class Trainer(tf.keras.Model):
         return loss_sum, (pos_f1 + neg_f1) / 2., accuracy
 
     def predict_proba(self, inputs):
-        unique_emb = self.emb_model(inputs["unique_feature"])
+        unique_emb = self.model(inputs["unique_feature"])
         labels = []
         pred_vals = []
         for i in range(3):
@@ -225,6 +129,15 @@ class Trainer(tf.keras.Model):
         return tf.concat(pred_vals, axis=1), tf.concat(labels, axis=1)
 
 
+@tf.function(experimental_relax_shapes=True)
+def forward_step(batch_inputs):
+    with tf.GradientTape() as tape:
+        loss, f1, acc = trainer(batch_inputs, training=True)
+    gradients = tape.gradient(loss, trainer.trainable_variables)
+    optimizer.apply_gradients(zip(gradients, trainer.trainable_variables))
+    return loss, f1, acc
+
+
 if __name__ == '__main__':
 
     # evaluate model
@@ -232,7 +145,7 @@ if __name__ == '__main__':
 
     # define model and dataset
     data_loader = DataLoader(train_histories, train_labels, unique_feature)
-    emb_model = DCNV2Model(feature_num_vocabs, feat_dim=8, out_dim=32, num_cross=5, num_linear=0)
+    emb_model = BERTCRF2Model(feature_num_vocabs, feat_dim=8, out_dim=32, num_cross=5, num_linear=0)
     plot_model(emb_model, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
 
     predictors = [Predictor(3), Predictor(10), Predictor(5)]
@@ -256,16 +169,6 @@ if __name__ == '__main__':
         .batch(128) \
         .map(data_loader.call) \
         .prefetch(tf.data.AUTOTUNE)
-
-
-    @tf.function(experimental_relax_shapes=True)
-    def forward_step(batch_inputs):
-        with tf.GradientTape() as tape:
-            loss, f1, acc = trainer(batch_inputs, training=True)
-        gradients = tape.gradient(loss, trainer.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, trainer.trainable_variables))
-        return loss, f1, acc
-
 
     with tf.device("CPU: 0"):
         best_f1_score = 0.0
