@@ -302,7 +302,7 @@ class DataProcess(object):
         return [np.array(data_ids), np.array(data_types)], np.array(label_ids)
 
 
-def preprocess(labels, images):
+def preprocess(images,labels):
     '''
     最简单的预处理函数:
         转numpy为Tensor、分类问题需要处理label为one_hot编码、处理训练数据

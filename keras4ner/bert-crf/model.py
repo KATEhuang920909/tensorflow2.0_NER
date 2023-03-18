@@ -121,11 +121,11 @@ output = CRF(output)
 
 model = Model(model.input, output)
 model.summary()
-
+metric = METRICS(num_class=len(categories))
 model.compile(
     loss=CRF.sparse_loss,
     optimizer=Adam(learning_rate),
-    metrics=[METRICS.f1_marco]
+    metrics=[metric.f1_marco]
 )
 
 
