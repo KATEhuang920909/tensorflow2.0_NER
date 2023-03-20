@@ -12,8 +12,7 @@ from utils.metrics import METRICS
 # define model
 class BERTCRF2Model(tf.keras.Model):
 
-    def __init__(self,
-                 num_classes):
+    def __init__(self, num_classes):
         super(BERTCRF2Model, self).__init__()
         self.num_classes = num_classes
         self.bert_model = build_transformer_model(config_path, checkpoint_path)

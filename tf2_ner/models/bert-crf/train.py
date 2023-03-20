@@ -90,7 +90,6 @@ if __name__ == '__main__':
     optimizer = tf.optimizers.Adam(learning_rate=1e-3)
     train_loss_metric = tf.keras.metrics.Mean()
     train_f1_metric = tf.keras.metrics.Mean()
-
     valid_loss_metric = tf.keras.metrics.Mean()
     valid_f1_metric = tf.keras.metrics.Mean()
 
@@ -112,7 +111,7 @@ if __name__ == '__main__':
 
             with tqdm(total=len(valid_data)) as pbar:
                 for i, batch_inputs in enumerate(valid_data):
-                    val_loss, val_f1 = BertCrfmodel(batch_inputs, training=True)
+                    val_loss, val_f1 = BertCrfmodel.
                     valid_loss_metric(loss)
                     valid_f1_metric(f1_score)
             valid_f1 = valid_f1_metric.result().numpy()

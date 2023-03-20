@@ -142,7 +142,7 @@ def get_w2i(vocab_path=path_vocab):
 
 
 # 获取 tag to index 词典
-def get_tag2index():
+def get_tag2index()->dict:
     return {"O": 0,
             "B-PER": 1, "I-PER": 2,
             "B-LOC": 3, "I-LOC": 4,

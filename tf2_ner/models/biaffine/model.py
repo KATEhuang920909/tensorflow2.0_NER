@@ -233,6 +233,7 @@ if __name__ == '__main__':
     # define model and dataset
     data_loader = DataLoader(train_histories, train_labels, unique_feature)
     emb_model = DCNV2Model(feature_num_vocabs, feat_dim=8, out_dim=32, num_cross=5, num_linear=0)
+
     plot_model(emb_model, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
 
     predictors = [Predictor(3), Predictor(10), Predictor(5)]
