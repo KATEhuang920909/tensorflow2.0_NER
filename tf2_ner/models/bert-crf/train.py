@@ -17,11 +17,16 @@ categories = set()
 tokenizer = Tokenizer(dict_path, do_lower_case=True)
 
 
-def load_data(filename):
+def load_data(filename, is_test=False):
     """加载数据
     单条格式：[text, (start, end, label), (start, end, label), ...]，
               意味着text[start:end + 1]是类型为label的实体。
     """
+    if is_test:
+        with open(filename, encoding='utf-8') as f:
+            data = f.readlines()
+            data = [k.strip().split("\x01")[1] for k in data]
+        return data if len(data) > 0 else None
     D = []
     with open(filename, encoding='utf-8') as f:
         f = f.read()
@@ -30,13 +35,17 @@ def load_data(filename):
                 continue
             d = ['']
             for i, c in enumerate(l.split('\n')):
-                char, flag = c.split(' ')
-                d[0] += char
-                if flag[0] == 'B':
-                    d.append([i, i, flag[2:]])
-                    categories.add(flag[2:])
-                elif flag[0] == 'I':
-                    d[-1][1] = i
+                if len(c.strip()) != 0:
+                    char, flag = c.split(' ')
+                    d[0] += char
+                    if flag[0] == 'B':
+                        d.append([i, i, flag[2:]])
+                        categories.add(flag[2:])
+                    elif flag[0] == 'E':
+                        d[-1][1] = i
+                    elif flag[0] == "O":
+                        categories.add("others")
+
             D.append(d)
     return D
 
@@ -78,13 +87,11 @@ class data_generator(DataGenerator):
 # 标注数据
 if __name__ == '__main__':
 
-    train_data = load_data('/root/ner/china-people-daily-ner-corpus/example.train')
-    valid_data = load_data('/root/ner/china-people-daily-ner-corpus/example.dev')
-    test_data = load_data('/root/ner/china-people-daily-ner-corpus/example.test')
+    train_data = load_data('../../data/address/train.conll')
+    valid_data = load_data('../../data/address/dev.conll')
+    test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
-
-
-
+    exit()
     BertCrfmodel = BERTCRF2Model(num_classes=len(get_tag2index()))
     plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=1e-3)
@@ -111,7 +118,7 @@ if __name__ == '__main__':
 
             with tqdm(total=len(valid_data)) as pbar:
                 for i, batch_inputs in enumerate(valid_data):
-                    val_loss, val_f1 = BertCrfmodel.
+                    val_loss, val_f1 = BertCrfmodel(batch_inputs)
                     valid_loss_metric(loss)
                     valid_f1_metric(f1_score)
             valid_f1 = valid_f1_metric.result().numpy()
