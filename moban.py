@@ -280,6 +280,9 @@ if __name__ == '__main__':
                                 "accuracy": acc_metric.result().numpy()}
                     pbar.set_postfix(progress)
                     pbar.update(1)
+
+
+
             print("epoch:", epoch + 1)
             print("train:", loss_metric.result().numpy(), f1_metric.result().numpy())
             loss_metric.reset_states()

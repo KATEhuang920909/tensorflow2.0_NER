@@ -3,6 +3,9 @@
 # @Author  : huangkai
 # @File    : train.py
 import tensorflow as tf
+import sys
+
+sys.path.append("../../")
 from model import BERTCRF2Model, forward_step
 from utils.data_helper import get_tag2index
 from tqdm.notebook import tqdm
@@ -118,13 +121,13 @@ if __name__ == '__main__':
 
     train_data = load_data('../../data/address/train.conll')
     valid_data = load_data('../../data/address/dev.conll')
-    print(len(train_data),len(valid_data))
+    print(len(train_data), len(valid_data))
     # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
-    train_data = ner_tokenizers(train_data[:200])
-    valid_data = ner_tokenizers(valid_data)
+    train_data_token = ner_tokenizers(train_data[:200])
+    valid_data_token = ner_tokenizers(valid_data)
     # print(train_data["token_id"].shape)
-    train_data, valid_data = load_dataset(train_data, valid_data, batch_size=batch_size)
+    train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
     BertCrfmodel = BERTCRF2Model(num_classes=len(categories))
@@ -144,27 +147,31 @@ if __name__ == '__main__':
     with tf.device("CPU: 0"):
         best_f1_score = 0.0
         for epoch in range(10):
-            with tqdm(total=len(train_data),desc=f"epoch {epoch}") as pbar:
-                for batch_inputs in train_data:
-                    loss, f1_score = forward_step(batch_inputs, BertCrfmodel, optimizer=optimizer)
-                    train_loss_metric(loss)
-                    train_f1_metric(f1_score)
-                    progress = {"BCE": train_loss_metric.result().numpy(), "f1_score": train_f1_metric.result().numpy()}
-                    pbar.set_postfix(progress)
-                    pbar.update(1)
-            print("epoch:", epoch + 1)
-            print("train:", train_loss_metric.result().numpy(), train_f1_metric.result().numpy())
-            train_loss_metric.reset_states()
-            train_f1_metric.reset_states()
-
-            with tqdm(total=len(valid_data)) as pbar:
-                for i, batch_inputs in enumerate(valid_data):
-                    val_loss, val_f1 = BertCrfmodel(batch_inputs)
-                    valid_loss_metric(loss)
-                    valid_f1_metric(f1_score)
+            for i, batch_inputs in enumerate(train_data_gen):
+                loss, f1_score = forward_step(batch_inputs, BertCrfmodel, optimizer=optimizer)
+                train_loss_metric(loss)
+                train_f1_metric(f1_score)
+                progress = {
+                    "epoch": epoch + 1,
+                    "progress": (i + 1) * batch_size if (i + 1) * batch_size < len(train_data) else len(train_data),
+                    "BCE_loss": train_loss_metric.result().numpy(),
+                    "f1_score": train_f1_metric.result().numpy()}
+                print("epoch", progress["epoch"],
+                      f"{progress['progress']}/{len(train_data)}",
+                      "BCE_loss", progress["BCE_loss"],
+                      "f1_score", progress["f1_score"])
+            print("epoch:", epoch + 1, "train:", train_loss_metric.result().numpy(), train_f1_metric.result().numpy())
+            for batch_inputs in valid_data_gen:
+                val_loss, val_f1 = BertCrfmodel(batch_inputs)
+                valid_loss_metric(val_loss)
+                valid_f1_metric(val_f1)
             valid_f1 = valid_f1_metric.result().numpy()
             if valid_f1 >= best_f1_score:
                 best_f1_score = valid_f1
                 BertCrfmodel.save_weights("/best_model/best_model.weights")
             print("val:", valid_loss_metric.result().numpy(), valid_f1_metric.result().numpy(),
                   "best_f1_score:", best_f1_score)
+            train_loss_metric.reset_states()
+            train_f1_metric.reset_states()
+            valid_loss_metric.reset_states()
+            valid_f1_metric.reset_states()

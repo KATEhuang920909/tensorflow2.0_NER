@@ -4,7 +4,8 @@
 # @File    : data_helper.py
 import tensorflow as tf
 import numpy as np
-
+import sys
+sys.path.append("../../utils")
 
 # define dataset
 # class DataLoader():
@@ -120,7 +121,7 @@ def renminribao_preprocessing(split_rate: float = 0.8,
 
 
 from global_config import *
-
+#
 unk_flag = '[UNK]'
 pad_flag = '[PAD]'
 cls_flag = '[CLS]'
