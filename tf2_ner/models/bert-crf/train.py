@@ -58,7 +58,9 @@ def ner_tokenizers(data):
     batch_token_ids, batch_segment_ids, batch_labels = [], [], []
     for d in data:
         tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
+
         mapping = tokenizer.rematch(d[0], tokens)
+        print(mapping)
         start_mapping = {j[0]: i for i, j in enumerate(mapping) if j}
         end_mapping = {j[-1]: i for i, j in enumerate(mapping) if j}
         token_ids = tokenizer.tokens_to_ids(tokens)

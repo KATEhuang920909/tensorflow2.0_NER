@@ -33,7 +33,7 @@ def load_vocab(dict_path, encoding='utf-8', simplified=False, startswith=None):
 
         return new_token_dict, keep_tokens
     else:
-        return token_dict
+        return token_dict, len(token_dict)
 
 
 def save_vocab(dict_path, token_dict, encoding='utf-8'):
@@ -47,12 +47,13 @@ def save_vocab(dict_path, token_dict, encoding='utf-8'):
 class TokenizerBase(object):
     """分词器基类
     """
+
     def __init__(
-        self,
-        token_start='[CLS]',
-        token_end='[SEP]',
-        pre_tokenize=None,
-        token_translate=None
+            self,
+            token_start='[CLS]',
+            token_end='[SEP]',
+            pre_tokenize=None,
+            token_translate=None
     ):
         """参数说明：
         pre_tokenize：外部传入的分词函数，用作对文本进行预分词。如果传入
@@ -102,12 +103,12 @@ class TokenizerBase(object):
         return [self.token_to_id(token) for token in tokens]
 
     def encode(
-        self,
-        first_text,
-        second_text=None,
-        maxlen=None,
-        pattern='S*E*E',
-        truncate_from='right'
+            self,
+            first_text,
+            second_text=None,
+            maxlen=None,
+            pattern='S*E*E',
+            truncate_from='right'
     ):
         """输出文本对应token id和segment id
         """
@@ -173,12 +174,13 @@ class Tokenizer(TokenizerBase):
     """Bert原生分词器
     纯Python实现，代码修改自keras_bert的tokenizer实现
     """
+
     def __init__(
-        self, token_dict, do_lower_case=False, word_maxlen=200, **kwargs
+            self, token_dict, do_lower_case=False, word_maxlen=200, **kwargs
     ):
         super(Tokenizer, self).__init__(**kwargs)
         if is_string(token_dict):
-            token_dict = load_vocab(token_dict)
+            token_dict, self.vocab_size = load_vocab(token_dict)
 
         self._do_lower_case = do_lower_case
         self._token_dict = token_dict
@@ -304,7 +306,7 @@ class Tokenizer(TokenizerBase):
         """空格类字符判断
         """
         return ch == ' ' or ch == '\n' or ch == '\r' or ch == '\t' or \
-            unicodedata.category(ch) == 'Zs'
+               unicodedata.category(ch) == 'Zs'
 
     @staticmethod
     def _is_punctuation(ch):
@@ -315,10 +317,10 @@ class Tokenizer(TokenizerBase):
         """
         code = ord(ch)
         return 33 <= code <= 47 or \
-            58 <= code <= 64 or \
-            91 <= code <= 96 or \
-            123 <= code <= 126 or \
-            unicodedata.category(ch).startswith('P')
+               58 <= code <= 64 or \
+               91 <= code <= 96 or \
+               123 <= code <= 126 or \
+               unicodedata.category(ch).startswith('P')
 
     @staticmethod
     def _cjk_punctuation():
@@ -331,13 +333,13 @@ class Tokenizer(TokenizerBase):
         """
         code = ord(ch)
         return 0x4E00 <= code <= 0x9FFF or \
-            0x3400 <= code <= 0x4DBF or \
-            0x20000 <= code <= 0x2A6DF or \
-            0x2A700 <= code <= 0x2B73F or \
-            0x2B740 <= code <= 0x2B81F or \
-            0x2B820 <= code <= 0x2CEAF or \
-            0xF900 <= code <= 0xFAFF or \
-            0x2F800 <= code <= 0x2FA1F
+               0x3400 <= code <= 0x4DBF or \
+               0x20000 <= code <= 0x2A6DF or \
+               0x2A700 <= code <= 0x2B73F or \
+               0x2B740 <= code <= 0x2B81F or \
+               0x2B820 <= code <= 0x2CEAF or \
+               0xF900 <= code <= 0xFAFF or \
+               0x2F800 <= code <= 0x2FA1F
 
     @staticmethod
     def _is_control(ch):
@@ -358,8 +360,8 @@ class Tokenizer(TokenizerBase):
         if len(token) > 1:
             for ch in Tokenizer.stem(token):
                 if (
-                    Tokenizer._is_cjk_character(ch) or
-                    Tokenizer._is_punctuation(ch)
+                        Tokenizer._is_cjk_character(ch) or
+                        Tokenizer._is_punctuation(ch)
                 ):
                     return True
 
@@ -368,7 +370,6 @@ class Tokenizer(TokenizerBase):
         """
         if is_py2:
             text = unicode(text)
-
         if self._do_lower_case:
             text = text.lower()
 
@@ -385,10 +386,13 @@ class Tokenizer(TokenizerBase):
 
         text, token_mapping, offset = normalized_text, [], 0
         for token in tokens:
+            # print(tokens, token, text)
             if self._is_special(token):
                 token_mapping.append([])
             else:
+
                 token = self.stem(token)
+
                 start = text[offset:].index(token) + offset
                 end = start + len(token)
                 token_mapping.append(char_mapping[start:end])
@@ -400,6 +404,7 @@ class Tokenizer(TokenizerBase):
 class SpTokenizer(TokenizerBase):
     """基于SentencePiece模型的封装，使用上跟Tokenizer基本一致。
     """
+
     def __init__(self, sp_model_path, **kwargs):
         super(SpTokenizer, self).__init__(**kwargs)
         import sentencepiece as spm
@@ -453,8 +458,8 @@ class SpTokenizer(TokenizerBase):
         """判断是不是有特殊含义的符号
         """
         return self.sp_model.is_control(i) or \
-            self.sp_model.is_unknown(i) or \
-            self.sp_model.is_unused(i)
+               self.sp_model.is_unknown(i) or \
+               self.sp_model.is_unused(i)
 
     def _is_decodable(self, i):
         """判断是否应该被解码输出

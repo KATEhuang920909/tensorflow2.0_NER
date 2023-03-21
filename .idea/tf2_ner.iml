@@ -6,6 +6,9 @@
       <sourceFolder url="file://$MODULE_DIR$/tf2_ner/utils" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tf2_ner" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tf2_ner/bert4keras" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tf2_ner/models" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/toponym-recognition-code-main" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/toponym-recognition-code-main/DataProcess" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.8" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
