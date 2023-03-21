@@ -42,7 +42,7 @@ class NamedEntityRecognizer(ViterbiDecoder):
         return [(mapping[w[0]][0], mapping[w[-1]][-1], l) for w, l in entities]
 
 if __name__ == '__main__':
-    model = BERTCRF2Model(categories)
+    model = BERTCRF2Model(len(categories))
     model.load_weights("/best_model/best_model.weights")
     NER = NamedEntityRecognizer(trans=K.eval(model.CRF.trans), starts=[0], ends=[0])
     NER.recognize("我这次来武汉只做三件事")

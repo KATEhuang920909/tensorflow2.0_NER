@@ -11,6 +11,7 @@ from keras.utils.vis_utils import plot_model
 from bert4keras.snippets import sequence_padding, DataGenerator
 from bert4keras.tokenizers import Tokenizer
 import numpy as np
+from utils.data_helper import DataProcess, load_dataset
 
 categories = set()
 # 建立分词器
@@ -50,35 +51,63 @@ def load_data(filename, is_test=False):
     return D
 
 
-class data_generator(DataGenerator):
-    """数据生成器
-    """
+def ner_tokenizers(data):
+    batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+    for d in data:
+        tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
+        mapping = tokenizer.rematch(d[0], tokens)
+        start_mapping = {j[0]: i for i, j in enumerate(mapping) if j}
+        end_mapping = {j[-1]: i for i, j in enumerate(mapping) if j}
+        token_ids = tokenizer.tokens_to_ids(tokens)
+        segment_ids = [0] * len(token_ids)
+        labels = np.zeros(len(token_ids))
+        for start, end, label in d[1:]:
+            if start in start_mapping and end in end_mapping:
+                start = start_mapping[start]
+                end = end_mapping[end]
+                labels[start] = categories.index(label) * 2 + 1
+                labels[start + 1:end + 1] = categories.index(label) * 2 + 2
+        batch_token_ids.append(token_ids)
+        batch_segment_ids.append(segment_ids)
+        batch_labels.append(labels)
 
-    def __iter__(self, random=False):
-        batch_token_ids, batch_segment_ids, batch_labels = [], [], []
-        for is_end, d in self.sample(random):
-            tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
-            mapping = tokenizer.rematch(d[0], tokens)
-            start_mapping = {j[0]: i for i, j in enumerate(mapping) if j}
-            end_mapping = {j[-1]: i for i, j in enumerate(mapping) if j}
-            token_ids = tokenizer.tokens_to_ids(tokens)
-            segment_ids = [0] * len(token_ids)
-            labels = np.zeros(len(token_ids))
-            for start, end, label in d[1:]:
-                if start in start_mapping and end in end_mapping:
-                    start = start_mapping[start]
-                    end = end_mapping[end]
-                    labels[start] = categories.index(label) * 2 + 1
-                    labels[start + 1:end + 1] = categories.index(label) * 2 + 2
-            batch_token_ids.append(token_ids)
-            batch_segment_ids.append(segment_ids)
-            batch_labels.append(labels)
-            if len(batch_token_ids) == self.batch_size or is_end:
-                batch_token_ids = sequence_padding(batch_token_ids)
-                batch_segment_ids = sequence_padding(batch_segment_ids)
-                batch_labels = sequence_padding(batch_labels)
-                yield [batch_token_ids, batch_segment_ids], batch_labels
-                batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+    batch_token_ids = sequence_padding(batch_token_ids)
+    batch_segment_ids = sequence_padding(batch_segment_ids)
+    batch_labels = sequence_padding(batch_labels)
+    return {"token_id": batch_token_ids,
+            "segment_id": batch_segment_ids,
+            "label": batch_labels}
+
+
+# class data_generator(DataGenerator):
+#     """数据生成器
+#     """
+#
+#     def __iter__(self, random=False):
+#         batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+#         for is_end, d in self.sample(random):
+#             tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
+#             mapping = tokenizer.rematch(d[0], tokens)
+#             start_mapping = {j[0]: i for i, j in enumerate(mapping) if j}
+#             end_mapping = {j[-1]: i for i, j in enumerate(mapping) if j}
+#             token_ids = tokenizer.tokens_to_ids(tokens)
+#             segment_ids = [0] * len(token_ids)
+#             labels = np.zeros(len(token_ids))
+#             for start, end, label in d[1:]:
+#                 if start in start_mapping and end in end_mapping:
+#                     start = start_mapping[start]
+#                     end = end_mapping[end]
+#                     labels[start] = categories.index(label) * 2 + 1
+#                     labels[start + 1:end + 1] = categories.index(label) * 2 + 2
+#             batch_token_ids.append(token_ids)
+#             batch_segment_ids.append(segment_ids)
+#             batch_labels.append(labels)
+#             if len(batch_token_ids) == self.batch_size or is_end:
+#                 batch_token_ids = sequence_padding(batch_token_ids)
+#                 batch_segment_ids = sequence_padding(batch_segment_ids)
+#                 batch_labels = sequence_padding(batch_labels)
+#                 yield [batch_token_ids, batch_segment_ids], batch_labels
+#                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
 
 
 # dp = DataProcess()
@@ -89,21 +118,33 @@ if __name__ == '__main__':
 
     train_data = load_data('../../data/address/train.conll')
     valid_data = load_data('../../data/address/dev.conll')
-    test_data = load_data('../../data/address/final_test.txt', is_test=True)
+    print(len(train_data),len(valid_data))
+    # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
-    exit()
-    BertCrfmodel = BERTCRF2Model(num_classes=len(get_tag2index()))
+    train_data = ner_tokenizers(train_data[:200])
+    valid_data = ner_tokenizers(valid_data)
+    # print(train_data["token_id"].shape)
+    train_data, valid_data = load_dataset(train_data, valid_data, batch_size=batch_size)
+
+    # train_data = data_generator(train_data, batch_size=batch_size)
+    BertCrfmodel = BERTCRF2Model(num_classes=len(categories))
+    BertCrfmodel.build(input_shape={"token_id": [batch_size, maxlen],
+                                    "segment_id": [batch_size, maxlen],
+                                    "label": [batch_size, maxlen]})
+    print(BertCrfmodel.summary())
+    # exit()
     plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=1e-3)
     train_loss_metric = tf.keras.metrics.Mean()
     train_f1_metric = tf.keras.metrics.Mean()
     valid_loss_metric = tf.keras.metrics.Mean()
     valid_f1_metric = tf.keras.metrics.Mean()
-
+    # print(len(train_data))
+    # exit()
     with tf.device("CPU: 0"):
         best_f1_score = 0.0
         for epoch in range(10):
-            with tqdm(total=len(train_data)) as pbar:
+            with tqdm(total=len(train_data),desc=f"epoch {epoch}") as pbar:
                 for batch_inputs in train_data:
                     loss, f1_score = forward_step(batch_inputs, BertCrfmodel, optimizer=optimizer)
                     train_loss_metric(loss)

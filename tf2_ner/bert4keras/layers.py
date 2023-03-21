@@ -1190,8 +1190,10 @@ class ConditionalRandomField(Layer):
         # y_true需要重新明确一下shape和dtype
         y_true = K.reshape(y_true, K.shape(y_pred)[:-1])
         y_true = K.cast(y_true, 'int32')
+        # print("test12",y_true.shape, y_pred.shape)
         # 转为one hot
         y_true = K.one_hot(y_true, K.shape(self.trans)[0])
+
         return self.dense_loss(y_true, y_pred)
 
     def dense_accuracy(self, y_true, y_pred):

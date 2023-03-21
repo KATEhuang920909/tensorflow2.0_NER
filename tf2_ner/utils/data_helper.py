@@ -316,17 +316,15 @@ def preprocess(images,labels):
     return labels, images
 
 
-def load_dataset(x_train, y_train, x_test, y_test, batch_size):
-    db_train = tf.data.Dataset.from_tensor_slices((x_train, y_train)) \
+def load_dataset(train_data, valid_data, batch_size):
+    db_train = tf.data.Dataset.from_tensor_slices(train_data) \
         .shuffle(1000, reshuffle_each_iteration=True) \
         .batch(batch_size) \
-        .map(preprocess) \
         .prefetch(tf.data.AUTOTUNE)
 
-    db_test = tf.data.Dataset.from_tensor_slices((x_test, y_test)) \
+    db_test = tf.data.Dataset.from_tensor_slices(valid_data) \
         .shuffle(1000, reshuffle_each_iteration=True) \
         .batch(batch_size) \
-        .map(preprocess) \
         .prefetch(tf.data.AUTOTUNE)
     return db_train, db_test
 
