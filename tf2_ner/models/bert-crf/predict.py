@@ -5,7 +5,6 @@
 
 
 
-from model import BERTCRF2Model
 from train import *
 from config import *
 from bert4keras.snippets import ViterbiDecoder, to_array
