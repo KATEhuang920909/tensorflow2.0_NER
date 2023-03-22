@@ -1,7 +1,12 @@
+#!/usr/bin/env python
+
 # -*- coding: utf-8 -*-
-# @Time    : 2023/3/12 20:08
-# @Author  : huangkai
-# @File    : train.py
+"""
+@Time ： 2023/3/23 上午12:36
+@Auth ： huangkai
+@File ：train.py
+@IDE ：PyCharm
+"""
 import tensorflow as tf
 import sys
 
