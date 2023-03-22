@@ -5,10 +5,11 @@
 @Time ： 2023/3/23 上午12:38
 @Auth ： huangkai
 @File ：config.py
-@IDE ：PyCharm
+@model_name ：biaffine
 """
 maxlen = 50
 epochs = 10
+units=128
 batch_size = 4
 bert_layers = 12
 learning_rate = 2e-5  # bert_layers越小，学习率应该要越大

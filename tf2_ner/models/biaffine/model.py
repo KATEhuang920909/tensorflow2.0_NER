@@ -5,7 +5,7 @@
 @Time ： 2023/3/23 上午12:36
 @Auth ： huangkai
 @File ：model.py
-@IDE ：PyCharm
+@model_name ：biaffine
 """
 import tensorflow as tf
 import sys
@@ -18,25 +18,59 @@ from utils.metrics import METRICS
 
 
 # define model
-class BERTCRF2Model(tf.keras.Model):
+class BiaffineModel(tf.keras.Model):
 
     def __init__(self, num_classes):
-        super(BERTCRF2Model, self).__init__()
+        super(BiaffineModel, self).__init__()
         self.num_classes = num_classes
         output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
         bert_model = build_transformer_model(config_path, checkpoint_path)
         self.bert_model = Model(bert_model.input, bert_model.get_layer(output_layer).output, name="BERT-MODEL")
-        self.dense_layer = Dense(self.num_classes * 2 + 1, activation="relu")
+        self.dense_left = Dense(units=units, activation="relu")
+        self.dense_right = Dense(units=units, activation="relu")
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
         self.metric = METRICS(num_class=self.num_classes * 2 + 1)
 
+    def build(self, input_shape):
+        self.ffns_weights = self.add_weight(name="biaffine_matrix",
+                                            shape=(
+                                                self.bert_model.hidden_size,
+                                                self.bert_model.hidden_size // 2),
+                                            initializer="uniform",
+                                            trainable=True)
+        self.ffne_weights = self.add_weight(name="biaffine_matrix",
+                                            shape=(
+                                                self.bert_model.hidden_size,
+                                                self.bert_model.hidden_size // 2),
+                                            initializer="uniform",
+                                            trainable=True)
+        self.biaffine_weights = self.add_weight(name="biaffine_matrix",
+                                                shape=(
+                                                    self.bert_model.hidden_size // 2,
+                                                    2 * self.num_classes + 1,
+                                                    self.bert_model.hidden_size // 2),
+                                                initializer="uniform",
+                                                trainable=True)
+    def losses(self):
+        """
+        :todo  2023.3.22
+
+        """
     def call(self, inputs):
         # print(inputs["token_id"].shape, inputs["label"].shape)
-        outputs = self.bert_model([inputs["token_id"], inputs["segment_id"]])
+        outputs = self.bert_model([inputs["token_id"], inputs["segment_id"]])  # batch_size,seq_len,hidden_size
 
-        outputs = self.dense_layer(outputs)
-        logits = self.CRF(outputs)  # logits
-
+        start = tf.tanh(tf.matmul(outputs, self.ffns_weights))  # batch_size,seq_len,hidden_size//2
+        end = tf.tanh(tf.matmul(outputs, self.ffne_weights))  # batch_size,seq_len,hidden_size//2
+        end = tf.transpose(end, [0, 2, 1])  # batch_size,hidden_size//2,seq_len
+        start = tf.reshape(start, [-1, tf.shape(start)[-1]])  # batch_size*seq_len,hidden_size//2
+        self.biaffine_weights = tf.reshape(self.biaffine_weights,
+                                           [tf.shape(start)[-1], -1])  # hidden_size//2,label*hidden_size//2
+        step1 = tf.matmul(start, self.biaffine_weights)  # batch_size*seq_len,label*hidden_size//2
+        step1 = tf.reshape(step1, [batch_size, -1, tf.shape(end)[-1]])  # batch_size,seq_len*label,hidden_size//2
+        step2 = tf.matmul(step1, end)  # batch_size,seq_len*label,,seq_len
+        step2 = tf.reshape(step2, [batch_size, maxlen, -1, maxlen])  # 最终的评分矩阵
+        logits = tf.argmax(step2, 2)  # [batch_size, maxlen, maxlen]
         loss = self.CRF.sparse_loss(inputs["label"], logits)
         # f1_score = self.metric.f1_marco(logits, inputs["label"])
 
