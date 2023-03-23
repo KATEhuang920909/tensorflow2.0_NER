@@ -59,32 +59,25 @@ def load_data(filename, is_test=False):
 
 def ner_tokenizers(data):
     batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+    one_hot_categories = tf.keras.utils.to_categorical(categories, num_classes=len(categories))
     for d in data:
         tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
-
-        mapping = tokenizer.rematch(d[0], tokens)
-        print(mapping)
-        start_mapping = {j[0]: i for i, j in enumerate(mapping) if j}
-        end_mapping = {j[-1]: i for i, j in enumerate(mapping) if j}
         token_ids = tokenizer.tokens_to_ids(tokens)
         segment_ids = [0] * len(token_ids)
-        labels = np.zeros(len(token_ids))
+        labels = np.zeros(shape=(len(token_ids), len(token_ids), len(categories)))
         for start, end, label in d[1:]:
-            if start in start_mapping and end in end_mapping:
-                start = start_mapping[start]
-                end = end_mapping[end]
-                labels[start] = categories.index(label) * 2 + 1
-                labels[start + 1:end + 1] = categories.index(label) * 2 + 2
+            labels[end][start] = one_hot_categories[categories.index(label)]  # 下三角
         batch_token_ids.append(token_ids)
         batch_segment_ids.append(segment_ids)
         batch_labels.append(labels)
+    print("labels shape", labels.shape)
 
     batch_token_ids = sequence_padding(batch_token_ids)
     batch_segment_ids = sequence_padding(batch_segment_ids)
     batch_labels = sequence_padding(batch_labels)
     return {"token_id": batch_token_ids,
             "segment_id": batch_segment_ids,
-            "label": batch_labels}
+            "label": batch_labels}  # batch_size,seq_len,seq_len,num_classes
 
 
 # class data_generator(DataGenerator):
@@ -138,10 +131,10 @@ if __name__ == '__main__':
     BertCrfmodel = BiaffineModel(num_classes=len(categories))
     BertCrfmodel.build(input_shape={"token_id": [batch_size, maxlen],
                                     "segment_id": [batch_size, maxlen],
-                                    "label": [batch_size, maxlen]})
+                                    "label": [batch_size, maxlen, maxlen, len(categories)]})
     print(BertCrfmodel.summary())
     # exit()
-    plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
+    # plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=1e-3)
     train_loss_metric = tf.keras.metrics.Mean()
     train_f1_metric = tf.keras.metrics.Mean()
