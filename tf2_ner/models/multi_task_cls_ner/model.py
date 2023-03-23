@@ -23,10 +23,10 @@ class ClsNerModel(tf.keras.Model):
         self.cls_bert_model = Model(bert_model.input, Lambda(lambda x: x[:, 0])(bert_model.output),
                                     name="CLS_BERT-MODEL")
         # self.cls_lstm = Bidirectional(LSTM(units=units,return_sequences=True))
-        self.cls_dense_layer = Dense(units=3, activation="softmax")
-        self.ner_dense_layer = Dense(self.num_classes * 2 + 1, activation="relu")
+        self.cls_dense_layer = Dense(units=3, activation="softmax",name="CLS_DENSE")
+        self.ner_dense_layer = Dense(self.num_classes * 2 + 1, activation="relu",name="NER_DENSE")
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
-        self.cls_loss = tf.keras.losses.BinaryFocalCrossentropy(from_logits=True)
+        self.cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 
     def call(self, inputs):
         # print(inputs["token_id"].shape, inputs["label"].shape)

@@ -78,6 +78,7 @@ def tokenizers(data):
     batch_token_ids = sequence_padding(batch_token_ids)
     batch_segment_ids = sequence_padding(batch_segment_ids)
     ner_batch_labels = sequence_padding(ner_batch_labels)
+    cls_batch_labels = sequence_padding(cls_batch_labels)
     return {"token_id": batch_token_ids,
             "segment_id": batch_segment_ids,
             "ner_label": ner_batch_labels,
