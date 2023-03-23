@@ -14,7 +14,6 @@ sys.path.append("../../")
 from bert4keras.models import build_transformer_model, Model
 from bert4keras.layers import Dense, ConditionalRandomField
 from config import *
-from utils.metrics import METRICS
 
 
 # define model
@@ -29,7 +28,6 @@ class BiaffineModel(tf.keras.Model):
         self.dense_left = Dense(units=units, activation="relu")
         self.dense_right = Dense(units=units, activation="relu")
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
-        self.metric = METRICS(num_class=self.num_classes * 2 + 1)
 
     def build(self, input_shape):
         self.ffns_weights = self.add_weight(name="biaffine_matrix",

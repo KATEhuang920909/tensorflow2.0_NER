@@ -8,14 +8,12 @@ import pandas as pd
 
 sys.path.append("../../")
 from model import ClsNerModel, forward_step
-from utils.data_helper import get_tag2index
-from tqdm.notebook import tqdm
 from config import *
 from keras.utils.vis_utils import plot_model
-from bert4keras.snippets import sequence_padding, DataGenerator
+from bert4keras.snippets import sequence_padding
 from bert4keras.tokenizers import Tokenizer
 import numpy as np
-from utils.data_helper import DataProcess, load_dataset
+from utils.data_helper import  load_dataset
 
 categories = set()
 labels = set()
@@ -31,7 +29,7 @@ def load_data(filename):
 
     # ner label
     D = []
-    data = pd.read_csv(filename).sample(frac=1.0)
+    data = pd.read_csv(filename,encoding="gbk").sample(frac=1.0)
     texts = data.text.values
     BIO_anno = data.BIO_anno.values
     label = tf.keras.utils.to_categorical(data["class"], num_classes=3)
@@ -49,7 +47,7 @@ def load_data(filename):
             elif types == "O":
                 categories.add("others")
         d.append(label[i])
-        labels.add(label[i])
+        labels.add(str(label[i]))
         D.append(d)
 
     return D
@@ -99,14 +97,14 @@ if __name__ == '__main__':
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = ClsNerModel(num_classes=len(categories))
-    BertCrfmodel.build(input_shape={"token_id": [batch_size, maxlen],
+    clsnermodel = ClsNerModel(num_classes=len(categories))
+    clsnermodel.build(input_shape={"token_id": [batch_size, maxlen],
                                     "segment_id": [batch_size, maxlen],
                                     "ner_label": [batch_size, maxlen],
                                     "cls_label": [batch_size, len(labels)]})
-    print(BertCrfmodel.summary())
+    print(clsnermodel.summary())
     # exit()
-    plot_model(BertCrfmodel, to_file='BERT_multi_task_cls_ner.png', show_shapes=True)
+    plot_model(clsnermodel, to_file='BERT_multi_task_cls_ner.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=1e-5)
     train_loss_metric = tf.keras.metrics.Mean()
     train_ner_f1_metric = tf.keras.metrics.Mean()
@@ -120,7 +118,7 @@ if __name__ == '__main__':
         best_ner_f1_score, best_cls_f1_score = 0.0, 0.0
         for epoch in range(10):
             for i, batch_inputs in enumerate(train_data_gen):
-                loss, ner_f1_score, cls_f1_score = forward_step(batch_inputs, BertCrfmodel, optimizer=optimizer)
+                loss, ner_f1_score, cls_f1_score = forward_step(batch_inputs, clsnermodel, optimizer=optimizer)
                 train_loss_metric(loss)
                 train_ner_f1_metric(ner_f1_score)
                 train_cls_f1_metric(cls_f1_score)
@@ -140,14 +138,14 @@ if __name__ == '__main__':
                   "ner_f1_score", train_ner_f1_metric.result().numpy(),
                   "cls_f1_score", train_cls_f1_metric.result().numpy())
             for batch_inputs in valid_data_gen:
-                val_loss, val_ner_f1_score, val_cls_f1_score = BertCrfmodel(batch_inputs)
+                val_loss, val_ner_f1_score, val_cls_f1_score = clsnermodel(batch_inputs)
                 valid_loss_metric(val_loss)
                 valid_ner_f1_metric(val_ner_f1_score)
                 valid_cls_f1_metric(val_cls_f1_score)
             valid_ner_f1, valid_cls_f1 = valid_ner_f1_metric.result().numpy(), valid_cls_f1_metric.result().numpy()
             if valid_ner_f1 >= best_ner_f1_score and valid_cls_f1 >= best_cls_f1_score:
                 best_ner_f1_score, best_cls_f1_score = valid_ner_f1, valid_cls_f1
-                BertCrfmodel.save_weights("/best_model/best_model.weights")
+                clsnermodel.save_weights("/best_model/best_model.weights")
             print("val:", valid_loss_metric.result().numpy(),
                   "ner_f1_score", valid_ner_f1_metric.result().numpy(),
                   "cls_f1_score", valid_cls_f1_metric.result().numpy(),

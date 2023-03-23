@@ -9,7 +9,6 @@ sys.path.append("../../")
 from bert4keras.models import build_transformer_model, Model
 from bert4keras.layers import Dense, ConditionalRandomField
 from config import *
-from utils.metrics import METRICS
 
 
 # define model
@@ -23,7 +22,6 @@ class BERTCRF2Model(tf.keras.Model):
         self.bert_model = Model(bert_model.input, bert_model.get_layer(output_layer).output, name="BERT-MODEL")
         self.dense_layer = Dense(self.num_classes * 2 + 1, activation="relu")
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
-        self.metric = METRICS(num_class=self.num_classes * 2 + 1)
 
     def call(self, inputs):
         # print(inputs["token_id"].shape, inputs["label"].shape)
