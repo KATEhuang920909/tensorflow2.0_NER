@@ -7,14 +7,12 @@ import sys
 
 sys.path.append("../../")
 from model import BERTCRF2Model, forward_step
-from utils.data_helper import get_tag2index
-from tqdm.notebook import tqdm
 from config import *
 from keras.utils.vis_utils import plot_model
-from bert4keras.snippets import sequence_padding, DataGenerator
+from bert4keras.snippets import sequence_padding
 from bert4keras.tokenizers import Tokenizer
 import numpy as np
-from utils.data_helper import DataProcess, load_dataset
+from utils.data_helper import load_dataset
 
 categories = set()
 # 建立分词器
