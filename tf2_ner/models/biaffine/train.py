@@ -7,6 +7,7 @@
 @File ：train.py
 @model_name ：biaffine
 """
+import pandas as pd
 import tensorflow as tf
 import sys
 
@@ -59,22 +60,28 @@ def load_data(filename, is_test=False):
 
 def ner_tokenizers(data):
     batch_token_ids, batch_segment_ids, batch_labels = [], [], []
-    one_hot_categories = tf.keras.utils.to_categorical(categories, num_classes=len(categories))
+    categories_idx = pd.factorize((categories))[0]
+
+    # one_hot_categories = tf.keras.utils.to_categorical(categories_idx, num_classes=len(categories))
+    # print(one_hot_categories)
     for d in data:
         tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
         token_ids = tokenizer.tokens_to_ids(tokens)
         segment_ids = [0] * len(token_ids)
-        labels = np.zeros(shape=(len(token_ids), len(token_ids), len(categories)))
+        labels = np.zeros(shape=(maxlen, maxlen, len(categories)))
+        # print(labels)
         for start, end, label in d[1:]:
-            labels[end][start] = one_hot_categories[categories.index(label)]  # 下三角
+            # print(end, start, categories.index(label))
+            # print(categories_idx[categories.index(label)])
+            # print(labels.shape)
+            labels[end][start][categories_idx[categories.index(label)]] = categories_idx[categories.index(label)]  # 下三角
         batch_token_ids.append(token_ids)
         batch_segment_ids.append(segment_ids)
         batch_labels.append(labels)
-    print("labels shape", labels.shape)
 
-    batch_token_ids = sequence_padding(batch_token_ids)
-    batch_segment_ids = sequence_padding(batch_segment_ids)
-    batch_labels = sequence_padding(batch_labels)
+    batch_token_ids = sequence_padding(batch_token_ids, length=maxlen)
+    batch_segment_ids = sequence_padding(batch_segment_ids, length=maxlen)
+    batch_labels = sequence_padding(batch_labels, length=maxlen)
     return {"token_id": batch_token_ids,
             "segment_id": batch_segment_ids,
             "label": batch_labels}  # batch_size,seq_len,seq_len,num_classes
@@ -128,11 +135,11 @@ if __name__ == '__main__':
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = BiaffineModel(num_classes=len(categories))
-    BertCrfmodel.build(input_shape={"token_id": [batch_size, maxlen],
-                                    "segment_id": [batch_size, maxlen],
-                                    "label": [batch_size, maxlen, maxlen, len(categories)]})
-    print(BertCrfmodel.summary())
+    BertCrfmodel = BiaffineModel(num_classes=len(categories), mask=True)
+    BertCrfmodel.build(input_shape={"token_id": [None, maxlen],
+                                    "segment_id": [None, maxlen],
+                                    "label": [None, maxlen, maxlen, len(categories)]})
+    # print(BertCrfmodel.summary())
     # exit()
     # plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=1e-3)
