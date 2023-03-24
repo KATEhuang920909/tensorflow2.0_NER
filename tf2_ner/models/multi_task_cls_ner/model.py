@@ -7,7 +7,7 @@ import sys
 
 sys.path.append("../../")
 from bert4keras.models import build_transformer_model, Model
-from bert4keras.layers import Dense, ConditionalRandomField,  Lambda
+from bert4keras.layers import Dense, ConditionalRandomField, Lambda
 from config import *
 
 
@@ -23,10 +23,17 @@ class ClsNerModel(tf.keras.Model):
         self.cls_bert_model = Model(bert_model.input, Lambda(lambda x: x[:, 0])(bert_model.output),
                                     name="CLS_BERT-MODEL")
         # self.cls_lstm = Bidirectional(LSTM(units=units,return_sequences=True))
-        self.cls_dense_layer = Dense(units=3, activation="softmax",name="CLS_DENSE")
-        self.ner_dense_layer = Dense(self.num_classes * 2 + 1, activation="relu",name="NER_DENSE")
+        self.cls_dense_layer = Dense(units=3, activation="softmax", name="CLS_DENSE")
+        self.ner_dense_layer = Dense(self.num_classes * 2 + 1, activation="relu", name="NER_DENSE")
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
         self.cls_loss = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+
+    def loss(self):
+        """
+        多任务的loss设计方案调研
+
+        """
+        pass
 
     def call(self, inputs):
         # print(inputs["token_id"].shape, inputs["label"].shape)
@@ -60,11 +67,9 @@ class ClsNerModel(tf.keras.Model):
             ner_f1 = 2 * p * r / (p + r + 1e-7)
             ner_f1_marco += ner_f1
 
-
-        cls_label = tf.argmax(inputs["cls_label"],-1)
+        cls_label = tf.argmax(inputs["cls_label"], -1)
         cls_shapes = tf.shape(cls_label)
         ones_, zeros_ = tf.ones(cls_shapes), tf.zeros(cls_shapes)
-
 
         for i in range(3):
             tp = tf.reduce_sum(tf.keras.backend.switch((cls_pred == i) & (cls_label == i), ones_, zeros_))
