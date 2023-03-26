@@ -5,3 +5,4 @@
 /tf2_ner/uncased_L-12_H-768_A-12/bert_model.ckpt.index
 /tf2_ner/uncased_L-12_H-768_A-12/bert_model.ckpt.meta
 /tf2_ner/uncased_L-12_H-768_A-12/vocab.txt
+/tf2_ner/chinese_bert_wwm_L-12_H-768_A-12/
