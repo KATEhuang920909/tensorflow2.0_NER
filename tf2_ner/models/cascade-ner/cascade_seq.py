@@ -17,12 +17,18 @@ from config import *
 
 
 # define model
-class CascadeNER(tf.keras.Model):
+class CascadeSpan(tf.keras.Model):
 
     def __init__(self, num_classes, mask=False):
-        super(CascadeNER, self).__init__()
+        super(CascadeSpan, self).__init__()
         self.num_classes = num_classes
-        self.bert_model = build_transformer_model(config_path, checkpoint_path)
+        output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
+        bert_model = build_transformer_model(config_path, checkpoint_path)
+        self.bert_model = Model(bert_model.input, bert_model.get_layer(output_layer).output, name="BERT-MODEL")
+        # print(self.bert_model.output.shape)
+        self.dense_left = Dense(units=units, activation="relu")
+        self.dense_right = Dense(units=units, activation="relu")
+        self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
         self.mask = mask
 
     def build(self, input_shape):

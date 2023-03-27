@@ -12,7 +12,7 @@ import tensorflow as tf
 import sys
 
 sys.path.append("../../")
-from model import CascadeNER, forward_step
+from cascade_span import CascadeSpan, forward_step
 from config import *
 from keras.utils.vis_utils import plot_model
 from bert4keras.snippets import sequence_padding
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = CascadeNER(num_classes=len(categories), mask=True)
+    BertCrfmodel = CascadeSpan(num_classes=len(categories), mask=True)
     BertCrfmodel.build(input_shape={"token_id": [None, maxlen],
                                     "segment_id": [None, maxlen],
                                     "label": [None, maxlen, maxlen, len(categories)]})
