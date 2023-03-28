@@ -23,15 +23,15 @@ class CascadeSpan(tf.keras.Model):
         super(CascadeSpan, self).__init__()
         self.num_classes = num_classes
         self.bert_model = build_transformer_model(config_path, checkpoint_path)
-        self.dense_head_stage1 = Dense(units=units, activation="sigmoid")
-        self.dense_tail_stage1 = Dense(units=units, activation="sigmoid")
-        self.dense_head_stage12 = Dense(units=1, activation="sigmoid")
-        self.dense_tail_stage12 = Dense(units=1, activation="sigmoid")
+        self.dense_head_stage1 = Dense(units=units, activation="sigmoid",name="dense_head_stage1")
+        self.dense_tail_stage1 = Dense(units=units, activation="sigmoid",name="dense_tail_stage1")
+        self.dense_head_stage12 = Dense(units=1, activation="sigmoid",name="dense_head_stage12")
+        self.dense_tail_stage12 = Dense(units=1, activation="sigmoid",name="dense_tail_stage12")
 
-        self.dense_head_stage2 = Dense(units=units, activation="sigmoid")
-        self.dense_tail_stage2 = Dense(units=units, activation="sigmoid")
-        self.dense_head_stage22 = Dense(units=1, activation="sigmoid")
-        self.dense_tail_stage22 = Dense(units=1, activation="sigmoid")
+        self.dense_head_stage2 = Dense(units=units, activation="sigmoid",name="dense_head_stage2")
+        self.dense_tail_stage2 = Dense(units=units, activation="sigmoid",name="dense_tail_stage2")
+        self.dense_head_stage22 = Dense(units=num_classes, activation="sigmoid",name="dense_head_stage22")
+        self.dense_tail_stage22 = Dense(units=num_classes, activation="sigmoid",name="dense_tail_stage22")
         self.mask = mask
 
     def call(self, inputs):
@@ -45,7 +45,7 @@ class CascadeSpan(tf.keras.Model):
         # 第一阶段
         head_outputs = self.dense_head_stage1(outputs)
         tail_outputs = self.dense_tail_stage1(outputs)
-        # print(head_outputs.shape)
+        # print("head_bio_label", head_bio_label.shape)
         head_pred = tf.reshape(self.dense_head_stage12(head_outputs), shape=tf.shape(head_bio_label))
         tail_pred = tf.reshape(self.dense_tail_stage12(tail_outputs), shape=tf.shape(tail_bio_label))
 
@@ -75,28 +75,52 @@ class CascadeSpan(tf.keras.Model):
             head_pred2 = tf.reshape(self.dense_head_stage22(head_outputs2), shape=tf.shape(head_cls_labels))
             tail_pred2 = tf.reshape(self.dense_tail_stage22(tail_outputs2), shape=tf.shape(tail_cls_labels))
 
-            head_loss2 = tf.losses.categorical_crossentropy(head_cls_labels, head_pred2)
-            tail_loss2 = tf.losses.categorical_crossentropy(tail_cls_labels, tail_pred2)
-
+            head_loss2 = tf.reduce_mean(tf.losses.binary_crossentropy(head_cls_labels, head_pred2))
+            tail_loss2 = tf.reduce_mean(tf.losses.binary_crossentropy(tail_cls_labels, tail_pred2))
+        # print(head_loss.shape, head_loss2.shape)
         loss = (head_loss + tail_loss) + (head_loss2 + tail_loss2)
-
+        # print("(head_loss + tail_loss) + (head_loss2 + tail_loss2)",
+        #       (head_loss + tail_loss) + (head_loss2 + tail_loss2))
         ss = ["f1_marco_head_bio", "f1_marco_tail_bio", "f1_marco_head_cls", "f1_marco_tail_cls"]
         result = []
         for y_pred, y_true in zip([head_pred, tail_pred, head_pred2, tail_pred2],
                                   [head_bio_label, tail_bio_label, head_cls_labels, tail_cls_labels]):
-            f1_marco = 0.0
-            # print(y_true.shape)
-            ones_, zeros_ = tf.ones(y_true.shape), tf.zeros(y_true.shape)
+            # print(y_pred.shape, y_true.shape)
+            # y_pred = tf.cast(y_pred, "int32")
+            # y_true = tf.cast(y_true, "int32")
+            if len(y_pred.shape) != 2:
+                # print(y_true, y_pred)
+                y_pred = tf.cast(tf.argmax(y_pred, -1), "int32")
+                y_true = tf.cast(tf.argmax(y_true, -1), "int32")
 
-            for i in range(2):
-                tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
-                fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
-                fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
-                p = tp / (tp + fp + 1e-7)
-                r = tp / (tp + fn + 1e-7)
-                f1 = 2 * p * r / (p + r + 1e-7)
-                f1_marco += f1
-            result.append(f1_marco / 2)
+                f1_marco = 0.0
+                # print(y_true.shape)
+                ones_, zeros_ = tf.ones(y_true.shape), tf.zeros(y_true.shape)
+
+                for i in range(self.num_classes):
+                    tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
+                    fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
+                    fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
+                    p = tp / (tp + fp + 1e-7)
+                    r = tp / (tp + fn + 1e-7)
+                    f1 = 2 * p * r / (p + r + 1e-7)
+                    f1_marco += f1
+                result.append(f1_marco / self.num_classes)
+            else:
+                # print(y_true,y_pred)
+                f1_marco = 0.0
+                # print(y_true.shape)
+                ones_, zeros_ = tf.ones(y_true.shape), tf.zeros(y_true.shape)
+
+                for i in range(2):
+                    tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
+                    fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
+                    fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
+                    p = tp / (tp + fp + 1e-7)
+                    r = tp / (tp + fn + 1e-7)
+                    f1 = 2 * p * r / (p + r + 1e-7)
+                    f1_marco += f1
+                result.append(f1_marco / 2)
         return loss, dict(zip(ss, result))
 
 

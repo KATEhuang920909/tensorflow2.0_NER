@@ -59,7 +59,6 @@ def load_data(filename, is_test=False):
 
 
 def ner_tokenizers(data):
-    cate_id = dict(zip(categories, np.arange(len(categories))))
     batch_token_ids, batch_segment_ids = [], []
     batch_head_bio_labels, batch_tail_bio_labels, batch_head_cls_labels, batch_tail_cls_labels = [], [], [], []
 
@@ -67,7 +66,8 @@ def ner_tokenizers(data):
         tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
         token_ids = tokenizer.tokens_to_ids(tokens)
         segment_ids = [0] * len(token_ids)
-        labels = [np.zeros(shape=(maxlen))] * 4
+        labels = [np.zeros(shape=(maxlen)), np.zeros(shape=(maxlen)),
+                  np.zeros(shape=(maxlen, len(categories))), np.zeros(shape=(maxlen, len(categories)))]
         # print(labels)
         for start, end, label in d[1:]:
             labels[0][start] = 1
@@ -80,7 +80,8 @@ def ner_tokenizers(data):
         batch_tail_bio_labels.append(labels[1])
         batch_head_cls_labels.append(labels[2])
         batch_tail_cls_labels.append(labels[3])
-
+    # print(start, end, label, labels)
+    # exit()
     batch_token_ids = sequence_padding(batch_token_ids, length=maxlen)
     batch_segment_ids = sequence_padding(batch_segment_ids, length=maxlen)
     batch_head_bio_labels = sequence_padding(batch_head_bio_labels, length=maxlen)
@@ -100,10 +101,14 @@ if __name__ == '__main__':
 
     train_data = load_data('../../data/address/train.conll')
     valid_data = load_data('../../data/address/dev.conll')
+
     print(len(train_data), len(valid_data))
     # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
-    train_data_token = ner_tokenizers(train_data[:200])
+    # print(categories)
+    cate_id = dict(zip(categories, np.diag(np.ones(len(categories)))))
+
+    train_data_token = ner_tokenizers(train_data)
     valid_data_token = ner_tokenizers(valid_data)
     # print(train_data["token_id"].shape)
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
@@ -114,16 +119,16 @@ if __name__ == '__main__':
                                     "segment_id": [batch_size, maxlen],
                                     "head_bio_labels": [batch_size, maxlen],
                                     "tail_bio_labels": [batch_size, maxlen],
-                                    "head_cls_labels": [batch_size, maxlen],
-                                    "tail_cls_labels": [batch_size, maxlen], })
+                                    "head_cls_labels": [batch_size, maxlen, len(categories)],
+                                    "tail_cls_labels": [batch_size, maxlen, len(categories)], })
     print(BertCrfmodel.summary())
     # exit()
     # plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=1e-3)
     train_loss_metric = tf.keras.metrics.Mean()
-    train_f1_metric = [tf.keras.metrics.Mean()] * 4
+    train_f1_metric = [tf.keras.metrics.Mean(),tf.keras.metrics.Mean(),tf.keras.metrics.Mean(),tf.keras.metrics.Mean()]
     valid_loss_metric = tf.keras.metrics.Mean()
-    valid_f1_metric = [tf.keras.metrics.Mean()] * 4
+    valid_f1_metric = [tf.keras.metrics.Mean(),tf.keras.metrics.Mean(),tf.keras.metrics.Mean(),tf.keras.metrics.Mean()]
     # print(len(train_data))
     # exit()
     with tf.device("CPU: 0"):
