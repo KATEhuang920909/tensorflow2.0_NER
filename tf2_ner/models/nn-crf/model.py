@@ -15,10 +15,13 @@ from attention import SelfAttention, Attention
 
 
 # define model
-class BILSTMCRF2Model(tf.keras.Model):
+class NN2Model(tf.keras.Model):
+    """
+    todo: 完成 idcnn-crf 、完成lattice lstm
+    """
 
-    def __init__(self, num_classes, vocab_size, embed_size, units, attention_type=None):
-        super(BILSTMCRF2Model, self).__init__()
+    def __init__(self, num_classes, vocab_size, embed_size, units, model_type, attention_type=None):
+        super(NN2Model, self).__init__()
         self.num_classes = num_classes
         self.Embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_size, mask_zero=True)
         self.LSTM = tf.keras.layers.LSTM(units=units, return_sequences=True)

@@ -6,7 +6,7 @@ import tensorflow as tf
 import sys
 
 sys.path.append("../../")
-from model import BILSTMCRF2Model, forward_step
+from model import NN2Model, forward_step
 from utils.data_helper import get_tag2index
 from tqdm.notebook import tqdm
 from config import *
@@ -152,8 +152,9 @@ if __name__ == '__main__':
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = BILSTMCRF2Model(num_classes=len(categories), vocab_size=vocab_size,
-                                   embed_size=embed_size, units=embed_size, attention_type="self-attention")
+    BertCrfmodel = NN2Model(num_classes=len(categories), vocab_size=vocab_size,
+                            embed_size=embed_size, units=embed_size,
+                            model_type=None, attention_type="self-attention")
     # num_classes, vocab_size, embed_size, units, attention_type=None
     BertCrfmodel.build(input_shape={"token_id": [batch_size, maxlen], "label": [batch_size, maxlen]})
     print(BertCrfmodel.summary())

@@ -36,7 +36,6 @@ class CascadeSpan(tf.keras.Model):
 
     def call(self, inputs):
         """
-                : todo  here 20230327
                 """
         # print(inputs["token_id"].shape, inputs["label"].shape)
         outputs = self.bert_model([inputs["token_id"], inputs["segment_id"]])  # batch_size,seq_len,hidden_size
