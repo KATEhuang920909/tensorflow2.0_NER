@@ -6,7 +6,7 @@
 
 maxlen = 50
 epochs = 10
-batch_size = 4
+batch_size = 32
 bert_layers = 12
 learning_rate = 2e-5  # bert_layers越小，学习率应该要越大
 crf_lr_multiplier = 1000  # 必要时扩大CRF层的学习率

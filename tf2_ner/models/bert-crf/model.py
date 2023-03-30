@@ -34,21 +34,22 @@ class BERTCRF2Model(tf.keras.Model):
         # f1_score = self.metric.f1_marco(logits, inputs["label"])
 
         # y_true = tf.reshape(inputs["label"], shapes[:-1])
+        y_true = tf.cast(inputs["label"], "int32")
         y_pred = tf.cast(tf.argmax(logits, 2), "int32")
-        f1_marco = 0
-        shapes = tf.shape(inputs["label"])
+        f1_marco = []
+        shapes = tf.shape(y_true)
         ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
-
+        # print(y_pred, y_true)
         for i in range(self.num_classes * 2 + 1):
-            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (inputs["label"] == i), ones_, zeros_))
-            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (inputs["label"] != i), ones_, zeros_))
-            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (inputs["label"] == i), ones_, zeros_))
+            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
+            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
+            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
             p = tp / (tp + fp + 1e-7)
             r = tp / (tp + fn + 1e-7)
             f1 = 2 * p * r / (p + r + 1e-7)
-            f1_marco += f1
+            f1_marco.append(f1)
 
-        return loss, f1_marco / (self.num_classes * 2 + 1)
+        return loss, tf.reduce_mean(f1_marco)
 
 
 # @tf.function(experimental_relax_shapes=True)

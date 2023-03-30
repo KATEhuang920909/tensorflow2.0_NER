@@ -142,7 +142,7 @@ if __name__ == '__main__':
     # print(BertCrfmodel.summary())
     # exit()
     # plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
-    optimizer = tf.optimizers.Adam(learning_rate=1e-3)
+    optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
     train_loss_metric = tf.keras.metrics.Mean()
     train_f1_metric = tf.keras.metrics.Mean()
     valid_loss_metric = tf.keras.metrics.Mean()
