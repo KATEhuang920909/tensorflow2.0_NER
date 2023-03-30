@@ -7,8 +7,7 @@ import sys
 
 sys.path.append("../")
 sys.path.append("../../")
-from bert4keras.models import build_transformer_model, Model
-from bert4keras.layers import Dense, ConditionalRandomField
+from bert4keras.layers import Dense, ConditionalRandomField, Dropout
 from config import *
 from utils.metrics import METRICS
 from attention import SelfAttention, Attention
@@ -17,19 +16,35 @@ from attention import SelfAttention, Attention
 # define model
 class NN2Model(tf.keras.Model):
     """
-    todo: 完成 idcnn-crf 、完成lattice lstm
+    todo: 完成 idcnn-crf
     """
 
-    def __init__(self, num_classes, vocab_size, embed_size, units, model_type, attention_type=None):
+    def __init__(self, num_classes, vocab_size, embed_size, units,
+                 model_type="bilstm", attention_type=None, drop_rate: float = 0.3, ):
         super(NN2Model, self).__init__()
+        self.model_type = model_type
         self.num_classes = num_classes
         self.Embedding = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_size, mask_zero=True)
         self.LSTM = tf.keras.layers.LSTM(units=units, return_sequences=True)
         self.BILSTM = tf.keras.layers.Bidirectional(self.LSTM)
         self.dense_layer = Dense(self.num_classes * 2 + 1, activation="relu")
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
-        self.Dropout = tf.keras.layers.Dropout(rate=0.3)
-        self.metric = METRICS(num_class=self.num_classes * 2 + 1)
+        self.dropout = Dropout(rate=drop_rate)
+        self.conv = tf.keras.layers.Conv1D(filters=256,
+                                           kernel_size=2,
+                                           activation='relu',
+                                           padding='same',
+                                           dilation_rate=1)
+        self.conv2 = tf.keras.layers.Conv1D(filters=256,
+                                            kernel_size=3,
+                                            activation='relu',
+                                            padding='same',
+                                            dilation_rate=1)
+        self.idcnn = tf.keras.layers.Conv1D(filters=512,
+                                            kernel_size=4,
+                                            activation='relu',
+                                            padding='same',
+                                            dilation_rate=2)
         if attention_type == "attention":
             self.attention = Attention(units)
         elif attention_type == "self-attention":
@@ -40,8 +55,14 @@ class NN2Model(tf.keras.Model):
     def call(self, inputs):
         # print(inputs["token_id"].shape, inputs["label"].shape)
         outputs = self.Embedding(inputs["token_id"])
-        outputs = self.BILSTM(outputs)
-        outputs = self.Dropout(outputs)
+        if self.model_type == "bilstm":
+            outputs = self.BILSTM(outputs)
+            outputs = self.Dropout(outputs)
+        elif self.model_type == "idcnn":
+            outputs = self.conv(outputs)
+            outputs = self.conv2(outputs)
+            outputs = self.idcnn(outputs)
+            outputs = self.Dropout(outputs)
         if self.attention:
             outputs = self.attention(outputs)
         else:
