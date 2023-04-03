@@ -22,9 +22,9 @@ class BiaffineModel(tf.keras.Model):
     def __init__(self, num_classes, mask=False):
         super(BiaffineModel, self).__init__()
         self.num_classes = num_classes
-        output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
-        bert_model = build_transformer_model(config_path, checkpoint_path)
-        self.bert_model = Model(bert_model.input, bert_model.get_layer(output_layer).output, name="BERT-MODEL")
+        #output_layer = 'Transformer-%s-FeedForward-Norm' % (bert_layers - 1)
+        self.bert_model = build_transformer_model(config_path, checkpoint_path)
+        #self.bert_model = Model(bert_model.input, bert_model.get_layer(output_layer).output, name="BERT-MODEL")
         # print(self.bert_model.output.shape)
         self.dense_left = Dense(units=units, activation="relu")
         self.dense_right = Dense(units=units, activation="relu")
@@ -81,20 +81,20 @@ class BiaffineModel(tf.keras.Model):
             loss = tf.losses.binary_crossentropy(inputs["label"], logits, axis=-1)
         y_pred = tf.cast(tf.argmax(logits, -1), "int32")
         y_true = tf.cast(tf.argmax(inputs["label"], -1), "int32")
-        f1_marco = 0
+        f1_marco = []
         shapes = tf.shape(y_true)
         ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
 
-        for i in range(self.num_classes):
+        for i in range(self.num_classes * 2 + 1):
             tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
             fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
             fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
             p = tp / (tp + fp + 1e-7)
             r = tp / (tp + fn + 1e-7)
             f1 = 2 * p * r / (p + r + 1e-7)
-            f1_marco += f1
+            f1_marco.append(f1)
 
-        return loss, f1_marco / (self.num_classes)
+        return loss, tf.reduce_mean(f1_marco)
 
 
 # @tf.function(experimental_relax_shapes=True)
