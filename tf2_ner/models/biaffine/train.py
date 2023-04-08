@@ -69,12 +69,14 @@ def ner_tokenizers(data):
         token_ids = tokenizer.tokens_to_ids(tokens)
         segment_ids = [0] * len(token_ids)
         labels = np.zeros(shape=(maxlen, maxlen, len(categories)))
+        labels = np.concatenate([labels, np.ones(shape=(maxlen, maxlen, 1))], axis=-1)
         # print(labels)
         for start, end, label in d[1:]:
             # print(end, start, categories.index(label))
             # print(categories_idx[categories.index(label)])
             # print(labels.shape)
-            labels[end][start][categories_idx[categories.index(label)]] = categories_idx[categories.index(label)]  # 下三角
+            labels[end][start][-1] = 0
+            labels[end][start][categories_idx[categories.index(label)]] = 1  # 下三角
         batch_token_ids.append(token_ids)
         batch_segment_ids.append(segment_ids)
         batch_labels.append(labels)
@@ -129,7 +131,9 @@ if __name__ == '__main__':
     print(len(train_data), len(valid_data))
     # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
-    train_data_token = ner_tokenizers(train_data[:200])
+    train_data_token = ner_tokenizers(train_data)
+    # print(train_data[:1],train_data_token["label"])
+    # exit()
     valid_data_token = ner_tokenizers(valid_data)
     # print(train_data["token_id"].shape)
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
