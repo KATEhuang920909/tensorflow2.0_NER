@@ -139,7 +139,7 @@ if __name__ == '__main__':
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = BiaffineModel(num_classes=len(categories), mask=True)
+    BertCrfmodel = BiaffineModel(num_classes=len(categories), mask=False)
     BertCrfmodel.build(input_shape={"token_id": [None, maxlen],
                                     "segment_id": [None, maxlen],
                                     "label": [None, maxlen, maxlen, len(categories)]})
