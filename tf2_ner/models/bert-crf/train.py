@@ -147,7 +147,8 @@ if __name__ == '__main__':
         best_f1_score = 0.0
         for epoch in range(10):
             for i, batch_inputs in enumerate(train_data_gen):
-                loss, f1_score = forward_step(batch_inputs, BertCrfmodel, optimizer=optimizer)
+                loss, f1_score = forward_step(batch_inputs, BertCrfmodel,len(categories), optimizer=optimizer,
+                                              is_training=True,is_evaluate=True)
                 train_loss_metric(loss)
                 train_f1_metric(f1_score)
                 progress = {
