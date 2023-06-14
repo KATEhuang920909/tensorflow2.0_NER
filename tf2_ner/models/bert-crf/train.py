@@ -73,48 +73,42 @@ def ner_tokenizers(data):
         batch_segment_ids.append(segment_ids)
         batch_labels.append(labels)
 
-    batch_token_ids = sequence_padding(batch_token_ids)
-    batch_segment_ids = sequence_padding(batch_segment_ids)
-    batch_labels = sequence_padding(batch_labels)
+    batch_token_ids = sequence_padding(batch_token_ids,length=maxlen)
+    batch_segment_ids = sequence_padding(batch_segment_ids,length=maxlen)
+    batch_labels = sequence_padding(batch_labels,length=maxlen)
     return {"token_id": batch_token_ids,
             "segment_id": batch_segment_ids,
             "label": batch_labels}
 
 
-# class data_generator(DataGenerator):
-#     """数据生成器
-#     """
-#
-#     def __iter__(self, random=False):
-#         batch_token_ids, batch_segment_ids, batch_labels = [], [], []
-#         for is_end, d in self.sample(random):
-#             tokens = tokenizer.tokenize(d[0], maxlen=maxlen)
-#             mapping = tokenizer.rematch(d[0], tokens)
-#             start_mapping = {j[0]: i for i, j in enumerate(mapping) if j}
-#             end_mapping = {j[-1]: i for i, j in enumerate(mapping) if j}
-#             token_ids = tokenizer.tokens_to_ids(tokens)
-#             segment_ids = [0] * len(token_ids)
-#             labels = np.zeros(len(token_ids))
-#             for start, end, label in d[1:]:
-#                 if start in start_mapping and end in end_mapping:
-#                     start = start_mapping[start]
-#                     end = end_mapping[end]
-#                     labels[start] = categories.index(label) * 2 + 1
-#                     labels[start + 1:end + 1] = categories.index(label) * 2 + 2
-#             batch_token_ids.append(token_ids)
-#             batch_segment_ids.append(segment_ids)
-#             batch_labels.append(labels)
-#             if len(batch_token_ids) == self.batch_size or is_end:
-#                 batch_token_ids = sequence_padding(batch_token_ids)
-#                 batch_segment_ids = sequence_padding(batch_segment_ids)
-#                 batch_labels = sequence_padding(batch_labels)
-#                 yield [batch_token_ids, batch_segment_ids], batch_labels
-#                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+class Trainer(tf.keras.Model):
 
+    def __init__(self, emb_model):
+        super(Trainer, self).__init__()
+        self.emb_model = emb_model
+        self.eps = 1e-9
+        self.num_classes = self.emb_model.num_classes
+    def call(self, inputs):
+        logits = self.emb_model([inputs["token_id"], inputs["segment_id"]])
+        loss = self.emb_model.CRF.sparse_loss(inputs["label"], logits)
+        # f1_score = self.metric.f1_marco(logits, inputs["label"])
 
-# dp = DataProcess()
-# train_data, train_label, val_data, val_label = dp.get_data(one_hot=False)
-# train_dataset, val_dataset = load_dataset(train_data, train_label, val_data, val_label, batch_size=batch_size)
+        # y_true = tf.reshape(inputs["label"], shapes[:-1])
+        y_pred = tf.cast(tf.argmax(logits, 2), "int32")
+        f1_marco = 0
+        shapes = tf.shape(inputs["label"])
+        ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
+
+        for i in range(self.num_classes * 2 + 1):
+            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (inputs["label"] == i), ones_, zeros_))
+            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (inputs["label"] != i), ones_, zeros_))
+            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (inputs["label"] == i), ones_, zeros_))
+            p = tp / (tp + fp + 1e-7)
+            r = tp / (tp + fn + 1e-7)
+            f1 = 2 * p * r / (p + r + 1e-7)
+            f1_marco += f1
+
+        return loss, f1_marco / (self.num_classes * 2 + 1)
 # 标注数据
 if __name__ == '__main__':
 
@@ -129,13 +123,14 @@ if __name__ == '__main__':
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = BERTCRF2Model(num_classes=len(categories))
-    BertCrfmodel.build(input_shape={"token_id": [batch_size, maxlen],
-                                    "segment_id": [batch_size, maxlen],
-                                    "label": [batch_size, maxlen]})
-    print(BertCrfmodel.summary())
+    model = BERTCRF2Model(num_classes=len(categories))
+    model.build(input_shape={"token_id": [batch_size, maxlen],"segment_id": [batch_size, maxlen]})
+    model.compute_output_shape(input_shape={"token_id": [batch_size, maxlen],"segment_id": [batch_size, maxlen]})
+    tf.keras.models.save_model(model,"./",save_format="tf")
+    print(model.summary())
+    trainer = Trainer(model)
     # exit()
-    plot_model(BertCrfmodel, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
+    # plot_model(model, to_file='BERT_BILSTM_CRF.png', show_shapes=True)
     optimizer = tf.optimizers.Adam(learning_rate=learning_rate)
     train_loss_metric = tf.keras.metrics.Mean()
     train_f1_metric = tf.keras.metrics.Mean()
@@ -147,7 +142,7 @@ if __name__ == '__main__':
         best_f1_score = 0.0
         for epoch in range(10):
             for i, batch_inputs in enumerate(train_data_gen):
-                loss, f1_score = forward_step(batch_inputs, BertCrfmodel, len(categories), optimizer=optimizer,
+                loss, f1_score = forward_step(batch_inputs, trainer, optimizer=optimizer,
                                               is_training=True, is_evaluate=True)
                 train_loss_metric(loss)
                 train_f1_metric(f1_score)
@@ -162,14 +157,14 @@ if __name__ == '__main__':
                       "f1_score", progress["f1_score"])
             print("epoch:", epoch + 1, "train:", train_loss_metric.result().numpy(), train_f1_metric.result().numpy())
             for batch_inputs in valid_data_gen:
-                val_loss, val_f1 = forward_step(batch_inputs, BertCrfmodel, len(categories), optimizer=optimizer,
+                val_loss, val_f1 = forward_step(batch_inputs, trainer,optimizer=optimizer,
                                                 is_training=False, is_evaluate=True)
                 valid_loss_metric(val_loss)
                 valid_f1_metric(val_f1)
             valid_f1 = valid_f1_metric.result().numpy()
             if valid_f1 >= best_f1_score:
                 best_f1_score = valid_f1
-                BertCrfmodel.save_weights("/best_model/best_model.weights")
+                trainer.save_weights("/best_model/best_model.weights")
             print("val:", valid_loss_metric.result().numpy(), valid_f1_metric.result().numpy(),
                   "best_f1_score:", best_f1_score)
             train_loss_metric.reset_states()

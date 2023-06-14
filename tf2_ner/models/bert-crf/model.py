@@ -24,22 +24,24 @@ class BERTCRF2Model(tf.keras.Model):
         self.CRF = ConditionalRandomField(lr_multiplier=crf_lr_multiplier)
 
     def call(self, inputs):
-        # print(inputs["token_id"].shape, inputs["label"].shape)
-        outputs = self.bert_model([inputs["token_id"], inputs["segment_id"]])
+        # print(inputs)
+        outputs = self.bert_model([inputs])
 
         outputs = self.dense_layer(outputs)
         logits = self.CRF(outputs)  # logits
 
-        loss = self.CRF.sparse_loss(inputs["label"], logits)
+
         # f1_score = self.metric.f1_marco(logits, inputs["label"])
 
         # y_true = tf.reshape(inputs["label"], shapes[:-1])
 
-        return loss, logits
+        return logits
 
 
 def F1_Score(y_true, y_pred, num_classes):
     y_true = tf.cast(y_true, "int32")
+    print("y_pred",y_pred)
+    print("y_true", y_true)
     y_pred = tf.cast(tf.argmax(y_pred, 2), "int32")
     f1_marco = []
     shapes = tf.shape(y_true)
@@ -57,17 +59,17 @@ def F1_Score(y_true, y_pred, num_classes):
 
 
 # @tf.function(experimental_relax_shapes=True)
-def forward_step(batch_inputs, trainer, num_classes, optimizer=None, is_training=True, is_evaluate=True):
+def forward_step(batch_inputs, trainer, optimizer=None, is_training=True, is_evaluate=True):
     if is_training:
         with tf.GradientTape() as tape:
-            loss, logits = trainer(batch_inputs)
+            loss, f1_score = trainer(batch_inputs)
 
             gradients = tape.gradient(loss, trainer.trainable_variables)
         optimizer.apply_gradients(zip(gradients, trainer.trainable_variables))
     else:
-        loss, logits = trainer(batch_inputs)
+        loss, f1_score = trainer(batch_inputs)
     if is_evaluate:
-        f1_score = F1_Score(batch_inputs["label"], logits, num_classes)
+        _,f1_score = trainer(batch_inputs)
         return loss, f1_score
     else:
-        return loss, logits
+        return loss, f1_score
