@@ -34,31 +34,40 @@ class BERTCRF2Model(tf.keras.Model):
         # f1_score = self.metric.f1_marco(logits, inputs["label"])
 
         # y_true = tf.reshape(inputs["label"], shapes[:-1])
-        y_true = tf.cast(inputs["label"], "int32")
-        y_pred = tf.cast(tf.argmax(logits, 2), "int32")
-        f1_marco = []
-        shapes = tf.shape(y_true)
-        ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
-        # print(y_pred, y_true)
-        for i in range(self.num_classes * 2 + 1):
-            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
-            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
-            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
-            p = tp / (tp + fp + 1e-7)
-            r = tp / (tp + fn + 1e-7)
-            f1 = 2 * p * r / (p + r + 1e-7)
-            f1_marco.append(f1)
 
-        return loss, tf.reduce_mean(f1_marco)
+        return loss, logits
+
+
+def F1_Score(y_true, y_pred, num_classes):
+    y_true = tf.cast(y_true, "int32")
+    y_pred = tf.cast(tf.argmax(y_pred, 2), "int32")
+    f1_marco = []
+    shapes = tf.shape(y_true)
+    ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
+    # print(y_pred, y_true)
+    for i in range(num_classes * 2 + 1):
+        tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
+        fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
+        fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
+        p = tp / (tp + fp + 1e-7)
+        r = tp / (tp + fn + 1e-7)
+        f1 = 2 * p * r / (p + r + 1e-7)
+        f1_marco.append(f1)
+    return tf.reduce_mean(f1_marco)
 
 
 # @tf.function(experimental_relax_shapes=True)
-def forward_step(batch_inputs, trainer, optimizer=None, is_training=True):
+def forward_step(batch_inputs, trainer, num_classes, optimizer=None, is_training=True, is_evaluate=True):
     if is_training:
         with tf.GradientTape() as tape:
-            loss, f1_score = trainer(batch_inputs)
-        gradients = tape.gradient(loss, trainer.trainable_variables)
+            loss, logits = trainer(batch_inputs)
+
+            gradients = tape.gradient(loss, trainer.trainable_variables)
         optimizer.apply_gradients(zip(gradients, trainer.trainable_variables))
     else:
-        loss, f1_score = trainer(batch_inputs)
-    return loss, f1_score
+        loss, logits = trainer(batch_inputs)
+    if is_evaluate:
+        f1_score = F1_Score(batch_inputs["label"], logits, num_classes)
+        return loss, f1_score
+    else:
+        return loss, logits
