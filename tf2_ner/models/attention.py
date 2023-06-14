@@ -17,7 +17,7 @@ class SelfAttention(tf.keras.layers.Layer):
         self.QKV = self.add_weight(name='QKV',
                                    shape=(3, input_shape[2], self.output_dim),
                                    initializer='uniform',
-                                   regularizer=tf.keras.regularizers.L1L2,
+                                   dtype="float32",
                                    trainable=True)
         super(SelfAttention, self).build(input_shape)
 

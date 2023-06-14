@@ -77,7 +77,7 @@ class BiaffineModel(tf.keras.Model):
             mask = tf.expand_dims(mask, -1)
             mask = tf.concat([mask] * (self.num_classes+1), axis=-1)
             logits = tf.multiply(logits, mask)  # 下三角
-            y_true = tf.multiply(inputs["label"], mask)
+            y_true = tf.multiply(inputs["label"], mask) # 下三角
             # print(logits.shape,logits)
             loss = tf.nn.softmax_cross_entropy_with_logits(y_true, logits)
             loss = tf.reduce_sum(loss)

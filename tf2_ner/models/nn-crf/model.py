@@ -52,9 +52,13 @@ class NN2Model(tf.keras.Model):
         else:
             self.attention = None
 
+    def build(self, input_shape):  # 可训练权重
+        super(NN2Model, self).build(input_shape)
+
     def call(self, inputs):
         # print(inputs["token_id"].shape, inputs["label"].shape)
-        outputs = self.Embedding(inputs["token_id"])
+        # print(inputs)
+        outputs = self.Embedding(inputs)
         if self.model_type == "bilstm":
             outputs = self.BILSTM(outputs)
             outputs = self.Dropout(outputs)
@@ -69,26 +73,10 @@ class NN2Model(tf.keras.Model):
             outputs = tf.reduce_mean(outputs, axis=-1)
         outputs = self.dense_layer(outputs)
         logits = self.CRF(outputs)  # logits
+        return logits
 
-        loss = self.CRF.sparse_loss(inputs["label"], logits)
-        # f1_score = self.metric.f1_marco(logits, inputs["label"])
-
-        # y_true = tf.reshape(inputs["label"], shapes[:-1])
-        y_pred = tf.cast(tf.argmax(logits, 2), "int32")
-        f1_marco = 0
-        shapes = tf.shape(inputs["label"])
-        ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
-
-        for i in range(self.num_classes * 2 + 1):
-            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (inputs["label"] == i), ones_, zeros_))
-            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (inputs["label"] != i), ones_, zeros_))
-            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (inputs["label"] == i), ones_, zeros_))
-            p = tp / (tp + fp + 1e-7)
-            r = tp / (tp + fn + 1e-7)
-            f1 = 2 * p * r / (p + r + 1e-7)
-            f1_marco += f1
-
-        return loss, f1_marco / (self.num_classes * 2 + 1)
+    # def compute_output_shape(self, input_shape):  # 输出shape
+    #     return (input_shape[0], input_shape[1], self.num_classes * 2 + 1)
 
 
 # @tf.function(experimental_relax_shapes=True)
