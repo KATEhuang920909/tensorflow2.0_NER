@@ -14,7 +14,7 @@ sys.path.append("../../")
 from bert4keras.models import build_transformer_model, Model
 from bert4keras.layers import Dense, ConditionalRandomField
 from config import *
-
+from metrics import batch_computeF1
 
 # define model
 class BiaffineModel(tf.keras.Model):
@@ -47,7 +47,7 @@ class BiaffineModel(tf.keras.Model):
         self.biaffine_weights = self.add_weight(name="biaffine_matrix",
                                                 shape=(
                                                     self.bert_model.output.shape[-1] // 2,
-                                                    self.num_classes + 1,
+                                                    self.num_classes,
                                                     self.bert_model.output.shape[-1] // 2),
                                                 initializer="uniform",
                                                 trainable=True)
@@ -66,11 +66,14 @@ class BiaffineModel(tf.keras.Model):
         # step1 = tf.reshape(step1, [batch_size, -1, tf.shape(end)[1]])  # batch_size,seq_len*label,hidden_size//2
         # print(step1.shape, end.shape)
         # step2 = tf.einsum("ijk,ikn->ijn", step1, end)  # batch_size,seq_len*label,,seq_len
-        # print(step2.shape)
+        # print(step2.shape,batch_size, maxlen, maxlen, self.num_classes)
         # logits = tf.reshape(step2, [batch_size, maxlen, maxlen, self.num_classes])  # 最终的评分矩阵
         # print(logits.shape,inputs["label"].shape)
         logits = tf.einsum("bxi,ioj,byj->bxyo", start, self.biaffine_weights, end)
-        # logits = tf.nn.softmax(logits)
+        # s = torch.einsum('bxi,oij,byj->boxy', x, self.weight, y)
+        # remove dim 1 if n_out == 1
+        # logits = tf.squeeze(logits,1)
+        logits = tf.nn.softmax(logits)
         if self.mask:
             mask = tf.ones(shape=[batch_size, maxlen, maxlen])
             mask = tf.linalg.LinearOperatorLowerTriangular(mask).to_dense()
@@ -80,26 +83,27 @@ class BiaffineModel(tf.keras.Model):
             y_true = tf.multiply(inputs["label"], mask) # 下三角
             # print(logits.shape,logits)
             loss = tf.nn.softmax_cross_entropy_with_logits(y_true, logits)
-            loss = tf.reduce_sum(loss)
+            loss = tf.reduce_mean(loss)
         else:
             loss = tf.nn.softmax_cross_entropy_with_logits(inputs["label"], logits)
-            loss = tf.reduce_sum(loss)
+            loss = tf.reduce_mean(loss)
         y_pred = tf.cast(tf.argmax(logits, -1), "int32")
         y_true = tf.cast(tf.argmax(inputs["label"], -1), "int32")
         f1_marco = []
-        shapes = tf.shape(y_true)
-        ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
+        # shapes = tf.shape(y_true)
+        # ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
+        #
+        # for i in range(self.num_classes + 1):
+        #     tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
+        #     fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
+        #     fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
+        #     p = tp / (tp + fp + 1e-7)
+        #     r = tp / (tp + fn + 1e-7)
+        #     f1 = 2 * p * r / (p + r + 1e-7)
+        #     f1_marco.append(f1)
+        precision, recall, f1_score, report = batch_computeF1(y_true, y_pred, maxlen, self.num_classes+1)
 
-        for i in range(self.num_classes * 2 + 1):
-            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
-            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
-            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
-            p = tp / (tp + fp + 1e-7)
-            r = tp / (tp + fn + 1e-7)
-            f1 = 2 * p * r / (p + r + 1e-7)
-            f1_marco.append(f1)
-
-        return loss, tf.reduce_mean(f1_marco)
+        return loss, f1_score
 
 
 # @tf.function(experimental_relax_shapes=True)

@@ -19,6 +19,6 @@ crf_lr_multiplier = 1000  # 必要时扩大CRF层的学习率
 # checkpoint_path = '../../uncased_L-12_H-768_A-12/bert_model.ckpt'
 # dict_path = '../../uncased_L-12_H-768_A-12/vocab.txt'
 
-config_path = '../../chinese_bert_wwm_L-12_H-768_A-12/publish/bert_config.json'
-checkpoint_path = '../../chinese_bert_wwm_L-12_H-768_A-12/publish/bert_model.ckpt'
-dict_path = '../../chinese_bert_wwm_L-12_H-768_A-12/publish/vocab.txt'
+config_path = r"D:\代码\pretrained_model\chinese_bert_wwm/bert_config.json"
+checkpoint_path = r"D:\代码\pretrained_model\chinese_bert_wwm/bert_model.ckpt"
+dict_path = r"D:\代码\pretrained_model\chinese_bert_wwm/vocab.txt"

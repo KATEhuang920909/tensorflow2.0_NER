@@ -131,15 +131,15 @@ if __name__ == '__main__':
     print(len(train_data), len(valid_data))
     # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
-    train_data_token = ner_tokenizers(train_data)
+    train_data_token = ner_tokenizers(train_data[:200])
     # print(train_data[:1],train_data_token["label"])
     # exit()
-    valid_data_token = ner_tokenizers(valid_data)
+    valid_data_token = ner_tokenizers(valid_data[:200])
     # print(train_data["token_id"].shape)
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
-    BertCrfmodel = BiaffineModel(num_classes=len(categories), mask=False)
+    BertCrfmodel = BiaffineModel(num_classes=len(categories)+1, mask=False)
     BertCrfmodel.build(input_shape={"token_id": [None, maxlen],
                                     "segment_id": [None, maxlen],
                                     "label": [None, maxlen, maxlen, len(categories)]})

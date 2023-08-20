@@ -321,12 +321,12 @@ def load_dataset(train_data, valid_data, batch_size):
     db_train = tf.data.Dataset.from_tensor_slices(train_data) \
         .shuffle(1000, reshuffle_each_iteration=True) \
         .batch(batch_size) \
-        .prefetch(tf.data.AUTOTUNE)
+        .prefetch(tf.data.experimental.AUTOTUNE)
 
     db_test = tf.data.Dataset.from_tensor_slices(valid_data) \
         .shuffle(1000, reshuffle_each_iteration=True) \
         .batch(batch_size) \
-        .prefetch(tf.data.AUTOTUNE)
+        .prefetch(tf.data.experimental.AUTOTUNE)
     return db_train, db_test
 
 

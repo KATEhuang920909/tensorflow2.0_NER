@@ -4,11 +4,10 @@
 # @File    : predict.py
 
 
-
 from train import *
 from config import *
 from bert4keras.snippets import ViterbiDecoder, to_array
-from bert4keras.backend import  K
+from bert4keras.backend import K
 
 # 建立分词器
 tokenizer = Tokenizer(dict_path, do_lower_case=True)
@@ -40,8 +39,11 @@ class NamedEntityRecognizer(ViterbiDecoder):
                 starting = False
         return [(mapping[w[0]][0], mapping[w[-1]][-1], l) for w, l in entities]
 
+
 if __name__ == '__main__':
     model = BERTCRF2Model(len(categories))
-    model.load_weights("/best_model/best_model.weights")
-    NER = NamedEntityRecognizer(trans=K.eval(model.CRF.trans), starts=[0], ends=[0])
+    model.load_weights("./best_model/best_model.weights")
+    print(model.summary())
+    NER = NamedEntityRecognizer(trans=K.eval(model.CRF._trans), starts=[0], ends=[0])
+    NER.trans = K.eval(model.CRF.trans)
     NER.recognize("我这次来武汉只做三件事")

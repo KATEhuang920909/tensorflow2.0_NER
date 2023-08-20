@@ -11,6 +11,6 @@ bert_layers = 12
 learning_rate = 2e-5  # bert_layers越小，学习率应该要越大
 crf_lr_multiplier = 1000  # 必要时扩大CRF层的学习率
 # bert配置
-config_path = "/home/huangkai/code/code/tensorflow2.0_NER/tf2_ner/chinese_bert_wwm_L-12_H-768_A-12/publish/bert_config.json"
-checkpoint_path = "/home/huangkai/code/code/tensorflow2.0_NER/tf2_ner/chinese_bert_wwm_L-12_H-768_A-12/publish/bert_model.ckpt"
-dict_path = "/home/huangkai/code/code/tensorflow2.0_NER/tf2_ner/chinese_bert_wwm_L-12_H-768_A-12/publish/vocab.txt"
+config_path = r"D:\代码\pretrained_model\chinese_bert_wwm/bert_config.json"
+checkpoint_path = r"D:\代码\pretrained_model\chinese_bert_wwm/bert_model.ckpt"
+dict_path = r"D:\代码\pretrained_model\chinese_bert_wwm/vocab.txt"

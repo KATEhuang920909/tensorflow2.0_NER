@@ -8,7 +8,6 @@ import sys
 sys.path.append("../../")
 from model import BERTCRF2Model, forward_step
 from config import *
-from keras.utils.vis_utils import plot_model
 from bert4keras.snippets import sequence_padding
 from bert4keras.tokenizers import Tokenizer
 import numpy as np
@@ -73,9 +72,9 @@ def ner_tokenizers(data):
         batch_segment_ids.append(segment_ids)
         batch_labels.append(labels)
 
-    batch_token_ids = sequence_padding(batch_token_ids,length=maxlen)
-    batch_segment_ids = sequence_padding(batch_segment_ids,length=maxlen)
-    batch_labels = sequence_padding(batch_labels,length=maxlen)
+    batch_token_ids = sequence_padding(batch_token_ids, length=maxlen)
+    batch_segment_ids = sequence_padding(batch_segment_ids, length=maxlen)
+    batch_labels = sequence_padding(batch_labels, length=maxlen)
     return {"token_id": batch_token_ids,
             "segment_id": batch_segment_ids,
             "label": batch_labels}
@@ -88,6 +87,7 @@ class Trainer(tf.keras.Model):
         self.emb_model = emb_model
         self.eps = 1e-9
         self.num_classes = self.emb_model.num_classes
+
     def call(self, inputs):
         logits = self.emb_model([inputs["token_id"], inputs["segment_id"]])
         loss = self.emb_model.CRF.sparse_loss(inputs["label"], logits)
@@ -109,6 +109,8 @@ class Trainer(tf.keras.Model):
             f1_marco += f1
 
         return loss, f1_marco / (self.num_classes * 2 + 1)
+
+
 # 标注数据
 if __name__ == '__main__':
 
@@ -118,15 +120,16 @@ if __name__ == '__main__':
     # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
     train_data_token = ner_tokenizers(train_data[:200])
-    valid_data_token = ner_tokenizers(valid_data)
+    valid_data_token = ner_tokenizers(valid_data[:200])
     # print(train_data["token_id"].shape)
     train_data_gen, valid_data_gen = load_dataset(train_data_token, valid_data_token, batch_size=batch_size)
 
     # train_data = data_generator(train_data, batch_size=batch_size)
     model = BERTCRF2Model(num_classes=len(categories))
-    model.build(input_shape={"token_id": [batch_size, maxlen],"segment_id": [batch_size, maxlen]})
-    model.compute_output_shape(input_shape={"token_id": [batch_size, maxlen],"segment_id": [batch_size, maxlen]})
-    tf.keras.models.save_model(model,"./",save_format="tf")
+    model.build(input_shape=[[batch_size, maxlen], [batch_size, maxlen]])
+
+    model.compute_output_shape(input_shape=[[batch_size, maxlen], [batch_size, maxlen]])
+    # tf.keras.models.save_model(model, "./", save_format="tf")
     print(model.summary())
     trainer = Trainer(model)
     # exit()
@@ -138,36 +141,39 @@ if __name__ == '__main__':
     valid_f1_metric = tf.keras.metrics.Mean()
     # print(len(train_data))
     # exit()
-    with tf.device("CPU: 0"):
-        best_f1_score = 0.0
-        for epoch in range(10):
-            for i, batch_inputs in enumerate(train_data_gen):
-                loss, f1_score = forward_step(batch_inputs, trainer, optimizer=optimizer,
-                                              is_training=True, is_evaluate=True)
-                train_loss_metric(loss)
-                train_f1_metric(f1_score)
-                progress = {
-                    "epoch": epoch + 1,
-                    "progress": (i + 1) * batch_size if (i + 1) * batch_size < len(train_data) else len(train_data),
-                    "BCE_loss": train_loss_metric.result().numpy(),
-                    "f1_score": train_f1_metric.result().numpy()}
-                print("epoch", progress["epoch"],
-                      f"{progress['progress']}/{len(train_data)}",
-                      "BCE_loss", progress["BCE_loss"],
-                      "f1_score", progress["f1_score"])
-            print("epoch:", epoch + 1, "train:", train_loss_metric.result().numpy(), train_f1_metric.result().numpy())
-            for batch_inputs in valid_data_gen:
-                val_loss, val_f1 = forward_step(batch_inputs, trainer,optimizer=optimizer,
-                                                is_training=False, is_evaluate=True)
-                valid_loss_metric(val_loss)
-                valid_f1_metric(val_f1)
-            valid_f1 = valid_f1_metric.result().numpy()
-            if valid_f1 >= best_f1_score:
-                best_f1_score = valid_f1
-                trainer.save_weights("/best_model/best_model.weights")
-            print("val:", valid_loss_metric.result().numpy(), valid_f1_metric.result().numpy(),
-                  "best_f1_score:", best_f1_score)
-            train_loss_metric.reset_states()
-            train_f1_metric.reset_states()
-            valid_loss_metric.reset_states()
-            valid_f1_metric.reset_states()
+    best_f1_score = 0.0
+    for epoch in range(10):
+        for i, batch_inputs in enumerate(train_data_gen):
+            loss, f1_score = forward_step(batch_inputs, trainer, optimizer=optimizer,
+                                          is_training=True, is_evaluate=True)
+            train_loss_metric(loss)
+            train_f1_metric(f1_score)
+            progress = {
+                "epoch": epoch + 1,
+                "progress": (i + 1) * batch_size if (i + 1) * batch_size < len(train_data) else len(train_data),
+                "BCE_loss": train_loss_metric.result().numpy(),
+                "f1_score": train_f1_metric.result().numpy()}
+            print("epoch", progress["epoch"],
+                  f"{progress['progress']}/{len(train_data)}",
+                  "BCE_loss", progress["BCE_loss"],
+                  "f1_score", progress["f1_score"])
+        print("epoch:", epoch + 1, "train_loss:", train_loss_metric.result().numpy(), "train_f1_score:",
+              train_f1_metric.result().numpy())
+        for batch_inputs in valid_data_gen:
+            val_loss, val_f1 = forward_step(batch_inputs, trainer, optimizer=optimizer,
+                                            is_training=False, is_evaluate=True)
+            valid_loss_metric(val_loss)
+            valid_f1_metric(val_f1)
+        valid_f1 = valid_f1_metric.result().numpy()
+        if valid_f1 >= best_f1_score:
+            print(f"best model update from {best_f1_score} to {valid_f1}")
+            best_f1_score = valid_f1
+
+            model.save_weights("./best_model/best_model.weights")
+        print("val:", valid_loss_metric.result().numpy(),
+              "val_f1_score:",valid_f1,
+              "best_f1_score:", best_f1_score)
+        train_loss_metric.reset_states()
+        train_f1_metric.reset_states()
+        valid_loss_metric.reset_states()
+        valid_f1_metric.reset_states()
