@@ -41,9 +41,19 @@ class NamedEntityRecognizer(ViterbiDecoder):
 
 
 if __name__ == '__main__':
+    train_data = load_data('../../data/address/train.conll')
+    valid_data = load_data('../../data/address/dev.conll')
+    print(len(train_data), len(valid_data))
+    # test_data = load_data('../../data/address/final_test.txt', is_test=True)
+    categories = list(sorted(categories))
     model = BERTCRF2Model(len(categories))
-    model.load_weights("./best_model/best_model.weights")
+    model.build(input_shape=[[batch_size, maxlen], [batch_size, maxlen]])
+
+    # model.compute_output_shape(input_shape=[[batch_size, maxlen], [batch_size, maxlen]])
     print(model.summary())
-    NER = NamedEntityRecognizer(trans=K.eval(model.CRF._trans), starts=[0], ends=[0])
-    NER.trans = K.eval(model.CRF.trans)
-    NER.recognize("我这次来武汉只做三件事")
+    model.load_weights("./best_model/best_model.weights")
+    # model.build((2,1,50))
+
+    NER = NamedEntityRecognizer(trans=K.eval(model.get_layer("conditional_random_field").trans), starts=[0], ends=[0])
+    # NER.trans = K.eval(model.CRF.trans)
+    print(NER.recognize("我这次来武汉只做三件事"))
