@@ -16,6 +16,7 @@ from bert4keras.layers import Dense, ConditionalRandomField
 from config import *
 from metrics import batch_computeF1
 
+
 # define model
 class BiaffineModel(tf.keras.Model):
 
@@ -56,8 +57,8 @@ class BiaffineModel(tf.keras.Model):
         # print(inputs["token_id"].shape, inputs["label"].shape)
         outputs = self.bert_model([inputs["token_id"], inputs["segment_id"]])  # batch_size,seq_len,hidden_size
 
-        start = tf.nn.gelu(tf.matmul(outputs, self.ffns_weights))  # batch_size,seq_len,hidden_size//2
-        end = tf.nn.gelu(tf.matmul(outputs, self.ffne_weights))  # batch_size,seq_len,hidden_size//2
+        start = tf.nn.leaky_relu(tf.matmul(outputs, self.ffns_weights))  # batch_size,seq_len,hidden_size//2
+        end = tf.nn.leaky_relu(tf.matmul(outputs, self.ffne_weights))  # batch_size,seq_len,hidden_size//2
         # end = tf.transpose(end, [0, 2, 1])  # batch_size,hidden_size//2,seq_len
         # start = tf.reshape(start, [-1, tf.shape(start)[-1]])  # batch_size*seq_len,hidden_size//2
         # self.biaffine_weights = tf.reshape(self.biaffine_weights,
@@ -73,37 +74,37 @@ class BiaffineModel(tf.keras.Model):
         # s = torch.einsum('bxi,oij,byj->boxy', x, self.weight, y)
         # remove dim 1 if n_out == 1
         # logits = tf.squeeze(logits,1)
-        logits = tf.nn.softmax(logits)
+        # logits = tf.nn.softmax(logits, axis=-1)
+        print(logits.shape, inputs["label"].shape, self.num_classes)
         if self.mask:
             mask = tf.ones(shape=[batch_size, maxlen, maxlen])
             mask = tf.linalg.LinearOperatorLowerTriangular(mask).to_dense()
             mask = tf.expand_dims(mask, -1)
-            mask = tf.concat([mask] * (self.num_classes+1), axis=-1)
+            mask = tf.concat([mask] * (self.num_classes + 1), axis=-1)
             logits = tf.multiply(logits, mask)  # 下三角
-            y_true = tf.multiply(inputs["label"], mask) # 下三角
+            y_true = tf.multiply(inputs["label"], mask)  # 下三角
             # print(logits.shape,logits)
             loss = tf.nn.softmax_cross_entropy_with_logits(y_true, logits)
             loss = tf.reduce_mean(loss)
         else:
-            loss = tf.nn.softmax_cross_entropy_with_logits(inputs["label"], logits)
-            loss = tf.reduce_mean(loss)
+            loss = tf.nn.softmax_cross_entropy_with_logits(inputs["label"], logits,axis=-1)
+            loss = tf.reduce_mean(loss,axis=-1)
         y_pred = tf.cast(tf.argmax(logits, -1), "int32")
         y_true = tf.cast(tf.argmax(inputs["label"], -1), "int32")
         f1_marco = []
-        # shapes = tf.shape(y_true)
-        # ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
-        #
-        # for i in range(self.num_classes + 1):
-        #     tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
-        #     fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
-        #     fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
-        #     p = tp / (tp + fp + 1e-7)
-        #     r = tp / (tp + fn + 1e-7)
-        #     f1 = 2 * p * r / (p + r + 1e-7)
-        #     f1_marco.append(f1)
-        precision, recall, f1_score, report = batch_computeF1(y_true, y_pred, maxlen, self.num_classes+1)
+        shapes = tf.shape(y_true)
+        ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
 
-        return loss, f1_score
+        for i in range(self.num_classes):
+            tp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true == i), ones_, zeros_))
+            fp = tf.reduce_sum(tf.keras.backend.switch((y_pred == i) & (y_true != i), ones_, zeros_))
+            fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (y_true == i), ones_, zeros_))
+            p = tp / (tp + fp + 1e-7)
+            r = tp / (tp + fn + 1e-7)
+            f1 = 2 * p * r / (p + r + 1e-7)
+            f1_marco.append(f1)
+
+        return loss, f1_marco
 
 
 # @tf.function(experimental_relax_shapes=True)
