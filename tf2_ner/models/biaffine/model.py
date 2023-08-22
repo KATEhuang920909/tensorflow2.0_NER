@@ -14,7 +14,7 @@ sys.path.append("../../")
 from bert4keras.models import build_transformer_model, Model
 from bert4keras.layers import Dense, ConditionalRandomField
 from config import *
-from metrics import batch_computeF1
+# from metrics import batch_computeF1
 
 
 # define model

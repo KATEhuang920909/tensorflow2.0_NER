@@ -121,6 +121,7 @@ if __name__ == '__main__':
     print(len(train_data), len(valid_data))
     # test_data = load_data('../../data/address/final_test.txt', is_test=True)
     categories = list(sorted(categories))
+    print("categories", categories)
     train_data_token = ner_tokenizers(train_data[:200])
     valid_data_token = ner_tokenizers(valid_data[:200])
     # print(train_data["token_id"].shape)
