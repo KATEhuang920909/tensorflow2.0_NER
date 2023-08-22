@@ -95,7 +95,7 @@ class Trainer(tf.keras.Model):
 
         # y_true = tf.reshape(inputs["label"], shapes[:-1])
         y_pred = tf.cast(tf.argmax(logits, 2), "int32")
-        f1_marco = 0
+        f1_marco, p_marco, r_marco = 0, 0, 0
         shapes = tf.shape(inputs["label"])
         ones_, zeros_ = tf.ones(shapes), tf.zeros(shapes)
 
@@ -105,10 +105,12 @@ class Trainer(tf.keras.Model):
             fn = tf.reduce_sum(tf.keras.backend.switch((y_pred != i) & (inputs["label"] == i), ones_, zeros_))
             p = tp / (tp + fp + 1e-7)
             r = tp / (tp + fn + 1e-7)
-            f1 = 2 * p * r / (p + r + 1e-7)
-            f1_marco += f1
-
-        return loss, f1_marco / (self.num_classes * 2 + 1)
+            p_marco += p
+            r_marco += r
+        p_marco = p_marco / (self.num_classes * 2 + 1)
+        r_marco = r_marco / (self.num_classes * 2 + 1)
+        f1 = 2 * p_marco * r_marco / (p_marco + r_marco + 1e-7)
+        return loss, f1
 
 
 # 标注数据
@@ -157,8 +159,6 @@ if __name__ == '__main__':
                   f"{progress['progress']}/{len(train_data)}",
                   "BCE_loss", progress["BCE_loss"],
                   "f1_score", progress["f1_score"])
-        print("epoch:", epoch + 1, "train_loss:", train_loss_metric.result().numpy(), "train_f1_score:",
-              train_f1_metric.result().numpy())
         for batch_inputs in valid_data_gen:
             val_loss, val_f1 = forward_step(batch_inputs, trainer, optimizer=optimizer,
                                             is_training=False, is_evaluate=True)
@@ -171,7 +171,7 @@ if __name__ == '__main__':
 
             model.save_weights("./best_model/best_model.weights")
         print("val:", valid_loss_metric.result().numpy(),
-              "val_f1_score:",valid_f1,
+              "val_f1_score:", valid_f1,
               "best_f1_score:", best_f1_score)
         train_loss_metric.reset_states()
         train_f1_metric.reset_states()
